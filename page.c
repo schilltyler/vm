@@ -1,10 +1,12 @@
 #include <stdio.h>
 #include <windows.h>
 #include "page.h"
+//#include "./globals.h"
 
 
-page_t* page_create(ULONG_PTR page_num) {
-    page_t* new_page = malloc(sizeof(page_t));
+page_t* page_create(page_t* pfn_base, ULONG_PTR page_num) {
+
+    page_t* new_page = VirtualAlloc(pfn_base + page_num, sizeof(page_t), MEM_COMMIT, PAGE_READWRITE);
     
     if (new_page == NULL) {
         printf("Could not create page\n");
@@ -17,23 +19,6 @@ page_t* page_create(ULONG_PTR page_num) {
 
     return new_page;
 }
-
-#if 0
-page_t* list_create(ULONG_PTR page_num) {
-    // create the page
-    page_t* new_page = page_create(page_num);
-
-    if (new_page == NULL) {
-        return NULL;
-    }
-
-    // set links
-    new_page->flink = new_page;
-    new_page->blink = new_page;
-
-    return new_page;
-}
-#endif
 
 // insert at head
 void list_insert(listhead_t* listhead, page_t* new_page) {

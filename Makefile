@@ -13,6 +13,7 @@ DEPS = page.h
 # Object files to compile
 OBJ = page.obj
 
+# TS: try using *.c instead of adding every c file
 make: pageTable.h
 	cl -Zi -o vm.exe vm1.c page.c pageTable.c
 

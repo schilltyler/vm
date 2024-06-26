@@ -5,6 +5,7 @@
 #include <excpt.h>
 #include "./page.h"
 #include "./pageTable.h"
+//#include "./globals.h"
 
 // Linker
 #pragma comment(lib, "advapi32.lib")
@@ -103,9 +104,12 @@ GetPrivilege  (
     return TRUE;
 }
 
+
 // Global variables
 PTE* pte_base;
 PULONG_PTR vmem_base;
+page_t* pfn_base;
+listhead_t free_list;
 
 /*
  * Third (full) test
@@ -194,39 +198,41 @@ full_virtual_memory_test (
     // initialize PTE's we will use
     ULONG_PTR num_pte_bytes = num_ptes * sizeof(PTE);
 
-    PPTE pte_base = malloc(num_pte_bytes);
+    pte_base = malloc(num_pte_bytes);
+
+    if (pte_base == NULL){
+        printf("Could not malloc pte_base\n");
+        return;
+    }
 
     memset(pte_base, 0, num_pte_bytes);
 
     // create free list, then populate it with physical frame numbers
-    listhead_t free_list;
+    free_list;
     free_list.flink = &free_list;
     free_list.blink = &free_list;
 
-    // this is the first page that we can always have on hand (links to all other pages)
-    page_t* first_page = page_create(physical_page_numbers[0]);
-    list_insert(&free_list, first_page);
-
-    // create all of the pfn entries (page structs) first
-    for (int i = 1; i < physical_page_count; i ++) {
-        page_create(physical_page_numbers[i]);
+    ULONG64 high_pfn = 0x0;
+    for (int i = 0; i < physical_page_count; i ++) {
+        if (physical_page_numbers[i] > high_pfn) {
+            high_pfn = physical_page_numbers[i];
+        }
     }
 
-    // now add all of the pages to the free list
-    page_t* new_page = first_page;
+    pfn_base = VirtualAlloc(NULL, high_pfn * sizeof(page_t), MEM_RESERVE, PAGE_READWRITE);
 
-    for (int i = 1; i < physical_page_count; i ++) {
+    if (pfn_base == NULL) {
+        printf("Could not allocate pfn_base\n");
+        return;
+    }
 
+    for (int i = 0; i < physical_page_count; i ++) {
+
+        page_t* new_page = page_create(pfn_base, physical_page_numbers[i]);
         list_insert(&free_list, new_page);
-        new_page = new_page->flink;
 
     }
 
-
-    if (pte_base == NULL) {
-            printf("Could not allocate pte space\n");
-            return;
-    }
 
     // Now perform random accesses.
     srand (time (NULL));
@@ -258,14 +264,7 @@ full_virtual_memory_test (
         }
 
         // We've page faulted, now go through states to grab the right memory page
-        // Free list is not going to be an option after short amount of time
-        // Go through pfn's and find the right aged page
         if (page_faulted) {
-
-            // connect virtual and physical addresses now (set the valid bit)
-            // 1) look at PTE for this va (might be trimmed, first access, etc.)
-            // 2) remove page from free frames list if available
-            // 3) modify PTE to represent physical frame we just allocated
 
             // try and get page from free list
             page_t* free_page = list_pop(&free_list);
@@ -273,38 +272,29 @@ full_virtual_memory_test (
             // free list does not have any pages left
             // so . . . trim random active page
             if (free_page == NULL) {
-                
-                // loop over pte's starting from pte_base (for loop, increase by 1 from base)
-                // valid bit equal to 1
+
+                // start a trimming thread
+                #if 0
+                HANDLE threads[1];
+                PARAM_STRUCT params;
+                params.test_type = test;
+                params.state = 0;
+                threads[0] = CreateThread(NULL, 0, trim_thread, &params, 0, NULL);
+                WaitForSingleObject(threads[0], INFINITE);
+                CloseHandle(threads[0]);
+                #endif
                 
                 for (PPTE trim_pte = pte_base; trim_pte < pte_base + num_ptes; trim_pte ++) {
                     
                     // found our page, let's trim
                     if (trim_pte->memory.valid == 1) {
 
-                        // get the physical frame number from the pte, add it back to free list
-                        // will circulate back and find a new virtual address that needs it
-                        // second parameter should be a page_t* that was already created before this
-                        // need to change around page_create and insert functions
-                        // page_create separate from list_insert
-                        // go through page_t to find the one with matching frame number
-                        // what page do we start at?
-                        page_t* curr_page = first_page;
-
-                        for (int i = 0; i < physical_page_count; i ++) {
-                            
-                            // TS: run pfn_from_frame_number??
-                            if (curr_page->pfn == trim_pte->memory.frame_number) {
-                                break;
-                            }
-
-                            curr_page = curr_page->flink;
-
-                        }
+                        page_t* curr_page = page_from_pfn(trim_pte->memory.frame_number, pfn_base);
 
                         list_insert(&free_list, curr_page);
 
                         PULONG_PTR trim_va = va_from_pte(trim_pte);
+
                         // unmap the va from the pa
                         if (MapUserPhysicalPages (trim_va, 1, NULL) == FALSE) {
 

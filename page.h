@@ -1,3 +1,6 @@
+#ifndef VM_PAGE_H
+#define VM_PAGE_H
+
 #include <stdio.h>
 #include <windows.h>
 #include "./pageTable.h"
@@ -22,11 +25,11 @@ typedef struct listhead {
     struct listhead* blink;
 } listhead_t;
 
-// Create a page node
-page_t* page_create(ULONG_PTR page_num);
+// get page from pfn
+extern page_t* page_from_pfn(ULONG64 pfn, page_t* pfn_base);
 
-// Create list with the first item
-//page_t* list_create(ULONG_PTR page_num);
+// Create a page node
+page_t* page_create(page_t* pfn_base, ULONG_PTR page_num);
 
 // Insert a page into the list
 void list_insert(listhead_t* listhead, page_t* new_page);
@@ -34,3 +37,4 @@ void list_insert(listhead_t* listhead, page_t* new_page);
 // Take a page from the list
 page_t* list_pop(listhead_t* listhead);
 
+#endif

@@ -1,6 +1,8 @@
 #include <stdio.h>
 #include <windows.h>
 #include "./pageTable.h"
+#include "./page.h"
+//#include "./globals.h"
 
 #define PAGE_SIZE 4096
 
@@ -31,4 +33,11 @@ PULONG_PTR va_from_pte(PTE* pte) {
     PULONG_PTR va = vmem_base + (difference / sizeof(ULONG_PTR));
 
     return va;
+}
+
+
+page_t* page_from_pfn(ULONG64 pfn, page_t* pfn_base) {
+
+    return pfn_base + pfn;
+
 }

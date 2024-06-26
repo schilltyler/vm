@@ -32,6 +32,7 @@ typedef struct {
 } PTE, *PPTE;
 
 extern PPTE pte_from_va(PULONG64 va);
+extern PULONG_PTR va_from_pte(PTE* pte);
 #endif
 
 #ifndef PAGE_TABLE_t
