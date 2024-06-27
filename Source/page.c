@@ -1,7 +1,7 @@
 #include <stdio.h>
 #include <windows.h>
-#include "page.h"
-//#include "./globals.h"
+#include "../Include/page.h"
+#include "../Include/globals.h"
 
 // May need this later
 //#define byte_offset(va) ((ULONG_PTR) va & ~(PAGE_SIZE - 1))

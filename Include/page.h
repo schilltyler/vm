@@ -3,13 +3,8 @@
 
 #include <stdio.h>
 #include <windows.h>
-#include "./pageTable.h"
+#include "../Include/pageTable.h"
 
-#define PAGE_SIZE                   4096
-#define MB(x)                       ((x) * 1024 * 1024)
-#define VIRTUAL_ADDRESS_SIZE        MB(16)
-#define VIRTUAL_ADDRESS_SIZE_IN_UNSIGNED_CHUNKS        (VIRTUAL_ADDRESS_SIZE / sizeof (ULONG_PTR))
-#define NUMBER_OF_PHYSICAL_PAGES   ((VIRTUAL_ADDRESS_SIZE / PAGE_SIZE) / 64) // ~1% of virtual address space
 
 // this is a PFN *Entry*
 typedef struct page {

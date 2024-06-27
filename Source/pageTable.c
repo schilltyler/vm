@@ -1,13 +1,9 @@
 #include <stdio.h>
 #include <windows.h>
-#include "./pageTable.h"
-#include "./page.h"
-//#include "./globals.h"
+#include "../Include/pageTable.h"
+#include "../Include/page.h"
+#include "../Include/globals.h"
 
-#define PAGE_SIZE 4096
-
-extern PTE* pte_base;
-extern PULONG_PTR vmem_base;
 
 // We want this because it will allow us to get the physical frame for any virtual address
 // (through the PTE that stores the frame number)

@@ -1,17 +1,15 @@
+#ifndef VM_PTE_H
+#define VM_PTE_H
+
 #include <stdio.h>
 #include <windows.h>
 
-#ifndef PTE_t
-#define PTE_t
 
 // physical + va linked and this page is currently being used
 typedef struct {
-    ULONG64 valid:1; // 1 bit (0 or 1) to determine this
-    // this is physical address because as you iterate through the virtual page list,
-    // you set the PTE for each va. So when you go through the list again and say I want
-    // va[1], then you will get the corresponding physical frame that you put in the PTE
+    ULONG64 valid:1;
     ULONG64 frame_number:40;
-    ULONG64 age:4; // ages up to 16;
+    ULONG64 age:4;
 } valid_pte;
 
 // these pages are ready to be used (pa + va not linked)
@@ -31,16 +29,14 @@ typedef struct {
     };
 } PTE, *PPTE;
 
-extern PPTE pte_from_va(PULONG64 va);
-extern PULONG_PTR va_from_pte(PTE* pte);
-#endif
-
-#ifndef PAGE_TABLE_t
-#define PAGE_TABLE_t
-
 typedef struct {
-    PTE pte_list; // list of PTE's
-    ULONG64 num_virtual_pages; // need this for iterating pte list
+    PTE pte_list; 
+    ULONG64 num_virtual_pages;
 } PAGE_TABLE;
+
+
+// Function prototypes
+PPTE pte_from_va(PULONG64 va);
+PULONG_PTR va_from_pte(PTE* pte);
 
 #endif
