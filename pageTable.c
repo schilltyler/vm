@@ -41,3 +41,8 @@ page_t* page_from_pfn(ULONG64 pfn, page_t* pfn_base) {
     return pfn_base + pfn;
 
 }
+
+ULONG64 pfn_from_page(page_t* page, page_t* pfn_base) {
+     
+    return page - pfn_base;
+}

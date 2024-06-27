@@ -10,13 +10,6 @@
 // Linker
 #pragma comment(lib, "advapi32.lib")
 
-// Recurring definitions
-#define PAGE_SIZE                   4096
-#define MB(x)                       ((x) * 1024 * 1024)
-#define VIRTUAL_ADDRESS_SIZE        MB(16)
-#define VIRTUAL_ADDRESS_SIZE_IN_UNSIGNED_CHUNKS        (VIRTUAL_ADDRESS_SIZE / sizeof (ULONG_PTR))
-#define NUMBER_OF_PHYSICAL_PAGES   ((VIRTUAL_ADDRESS_SIZE / PAGE_SIZE) / 64) // ~1% of virtual address space
-
 
 // Privileges (do not worry about)
 BOOL
@@ -208,7 +201,6 @@ full_virtual_memory_test (
     memset(pte_base, 0, num_pte_bytes);
 
     // create free list, then populate it with physical frame numbers
-    free_list;
     free_list.flink = &free_list;
     free_list.blink = &free_list;
 
@@ -243,7 +235,7 @@ full_virtual_memory_test (
         // CPU will get physical page and install PTE to map it
         // CPU will repeat instruction, will see valid PTE, will get contents
 
-        random_number = rand () * rand() * rand(); // this could be too low
+        random_number = rand () * rand() * rand();
 
         random_number %= virtual_address_size_in_unsigned_chunks;
 
@@ -309,6 +301,10 @@ full_virtual_memory_test (
 
                         free_page = list_pop(&free_list);
 
+                        if (free_page == NULL) {
+                            printf("Could not pop from free_list\n");
+                        }
+
                         break;
 
                     }
@@ -317,9 +313,11 @@ full_virtual_memory_test (
 
             }
 
-            if (MapUserPhysicalPages (arbitrary_va, 1, (PULONG_PTR) &free_page->pfn) == FALSE) {
+            ULONG64 pfn = pfn_from_page(free_page, pfn_base);
 
-                printf ("full_virtual_memory_test : could not map VA %p to page %llX\n", arbitrary_va, free_page->pfn);
+            if (MapUserPhysicalPages (arbitrary_va, 1, &pfn) == FALSE) {
+
+                printf ("full_virtual_memory_test : could not map VA %p to page %llX\n", arbitrary_va, pfn);
 
                 return;
             }
@@ -327,8 +325,10 @@ full_virtual_memory_test (
             PPTE pte = pte_from_va(arbitrary_va);
 
             pte->memory.valid = 1;
-            pte->memory.frame_number = free_page->pfn;
-    
+            pte->memory.frame_number = pfn;
+
+            // need this for when I trim page from something like standby and want to cut off old pte to replace with new one
+            free_page->pte = pte;
 
             // No exception handler needed now since we have connected
             // the virtual address above to one of our physical pages

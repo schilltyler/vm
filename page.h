@@ -5,6 +5,12 @@
 #include <windows.h>
 #include "./pageTable.h"
 
+#define PAGE_SIZE                   4096
+#define MB(x)                       ((x) * 1024 * 1024)
+#define VIRTUAL_ADDRESS_SIZE        MB(16)
+#define VIRTUAL_ADDRESS_SIZE_IN_UNSIGNED_CHUNKS        (VIRTUAL_ADDRESS_SIZE / sizeof (ULONG_PTR))
+#define NUMBER_OF_PHYSICAL_PAGES   ((VIRTUAL_ADDRESS_SIZE / PAGE_SIZE) / 64) // ~1% of virtual address space
+
 // this is a PFN *Entry*
 typedef struct page {
 
@@ -12,8 +18,8 @@ typedef struct page {
     struct page* flink;
     struct page* blink;
 
-    // each page has a physical frame number that corresponds
-    ULONG64 pfn;
+    // TS: fix this later
+    ULONG64 structure_pad;
 
     // this page (that has the physical page address) is connected to a va through this
     PTE* pte;
