@@ -1,7 +1,7 @@
 #include <stdio.h>
 #include <windows.h>
 #include "../Include/page.h"
-#include "../Include/globals.h"
+#include "../Include/initialize.h"
 
 // May need this later
 //#define byte_offset(va) ((ULONG_PTR) va & ~(PAGE_SIZE - 1))
@@ -20,7 +20,7 @@ page_t* page_create(page_t* pfn_base, ULONG_PTR page_num) {
         return NULL;
     }
 
-    // set pfn
+    // set pte
     new_page->pte = NULL;
 
     return new_page;
@@ -35,13 +35,16 @@ void list_insert(listhead_t* listhead, page_t* new_page) {
     listhead->flink = (listhead_t*) new_page;
     new_page->blink = (page_t*) listhead;
 
+    // increment list size
+    listhead->list_size += 1;
+
     return;
 }
 
 page_t* list_pop(listhead_t* listhead) {
+
     // check if list is empty
     if (listhead->flink == listhead) {
-        //printf("Nothing to pop, the list is empty\n");
         return NULL;
     }
 
@@ -49,6 +52,9 @@ page_t* list_pop(listhead_t* listhead) {
     page_t* popped_page = (page_t*) listhead->flink;
     listhead->flink = listhead->flink->flink;
     listhead->flink->blink = listhead;
+
+    // increment list size
+    listhead->list_size -= 1;
 
     return popped_page;
 }

@@ -38,5 +38,6 @@ typedef struct {
 // Function prototypes
 PPTE pte_from_va(PULONG64 va);
 PULONG_PTR va_from_pte(PTE* pte);
+//TS: look into adding the other two functions here
 
 #endif

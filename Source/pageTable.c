@@ -1,16 +1,16 @@
 #include <stdio.h>
 #include <windows.h>
-#include "../Include/pageTable.h"
+#include "../Include/pagetable.h"
 #include "../Include/page.h"
-#include "../Include/globals.h"
+#include "../Include/initialize.h"
 
 
-// We want this because it will allow us to get the physical frame for any virtual address
-// (through the PTE that stores the frame number)
+
 PPTE pte_from_va(PULONG64 va) { 
 
     // find how many spaces are between our va and the first va in the allocated chunk
     ULONG_PTR difference = (ULONG_PTR) va - (ULONG_PTR) vmem_base;
+    
     // divide this space by the page size to know how many pages the space is (each page has a pte)
     difference /= PAGE_SIZE;
 

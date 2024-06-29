@@ -1,67 +1,60 @@
 #include <stdio.h>
 #include "../Include/page.h"
-#include "../Include/pageTable.h"
-#include "../Include/globals.h"
+#include "../Include/pagetable.h"
+#include "../Include/initialize.h"
 
 #define SUCCESS 1
 #define ERROR 0
 
+CRITICAL_SECTION pte_lock;
 
+// Queue this to start back up again after trimming is done
 int handle_page_fault(PULONG_PTR virtual_address) {
+
+    PPTE pte = pte_from_va(virtual_address);
+
+    // START LOCK HERE
+    EnterCriticalSection(&pte_lock);
+    if (pte->memory.valid == 1) {
+        LeaveCriticalSection(&pte_lock);
+        return SUCCESS;
+    }
+    
+    #if 0 
+    if pte = 0
+        do below
+    else
+        if pte says page is on standby or modified list
+            get specific page from that list (pte tells us which one)
+            set pte valid bit & page number
+            done
+        else
+            get page from free/standby
+            read contents from disk address in pte
+            write contents into page from free/stanby (page from 31)
+            set pte valid bit/ page num
+            done
+    #endif
 
     page_t* free_page = list_pop(&free_list);
 
     // free list does not have any pages left
     // so . . . trim random active page
+    #if 0
     if (free_page == NULL) {
 
-        // start a trimming thread
-        #if 0
-        HANDLE threads[1];
-        PARAM_STRUCT params;
-        params.test_type = test;
-        params.state = 0;
-        threads[0] = CreateThread(NULL, 0, trim_thread, &params, 0, NULL);
-        WaitForSingleObject(threads[0], INFINITE);
-        CloseHandle(threads[0]);
-        #endif
-        
-        for (PPTE trim_pte = pte_base; trim_pte < pte_base + num_ptes; trim_pte ++) {
-            
-            // found our page, let's trim
-            if (trim_pte->memory.valid == 1) {
+        free_page = list_pop(&standby_list);
 
-                page_t* curr_page = page_from_pfn(trim_pte->memory.frame_number, pfn_base);
-
-                list_insert(&free_list, curr_page);
-
-                PULONG_PTR trim_va = va_from_pte(trim_pte);
-
-                // unmap the va from the pa
-                if (MapUserPhysicalPages (trim_va, 1, NULL) == FALSE) {
-
-                    printf ("full_virtual_memory_test : could not unmap trim_va %p\n", trim_va);
-
-                    return ERROR;
-                }
-
-                // set valid bit to 0
-                trim_pte->memory.valid = 0;
-                trim_pte->memory.frame_number = 0;
-
-                free_page = list_pop(&free_list);
-
-                if (free_page == NULL) {
-                    printf("Could not pop from free_list\n");
-                }
-
-                break;
-
-            }
-
-        }    
+        if can't get from standby
+            release locks, then wait here until free or standby page appears (set other event)
+            retry everything (return to caller)
+        else
+            we're good, do all of the pte stuff below as if it was a free page
 
     }
+    #endif
+
+    // convert from 
 
     ULONG64 pfn = pfn_from_page(free_page, pfn_base);
 
@@ -72,7 +65,7 @@ int handle_page_fault(PULONG_PTR virtual_address) {
         return ERROR;
     }
 
-    PPTE pte = pte_from_va(virtual_address);
+    
 
     pte->memory.valid = 1;
     pte->memory.frame_number = pfn;
@@ -80,10 +73,14 @@ int handle_page_fault(PULONG_PTR virtual_address) {
     // need this for when I trim page from something like standby and want to cut off old pte to replace with new one
     free_page->pte = pte;
 
-    // No exception handler needed now since we have connected
-    // the virtual address above to one of our physical pages
-    // so no subsequent fault can occur.
-    *virtual_address = (ULONG_PTR) virtual_address;
+    //END LOCK HERE
+    LeaveCriticalSection(&pte_lock);
+
+    // if getting this page put us below 10% pages left on combined free and standby list (might want to set trim event)
+    // below 20% might want to age (talked about dynamic algorithm)
+    if (free_list.list_size < physical_page_count * 0.15) {
+        SetEvent(trim_event);
+    }
 
     return SUCCESS;
 }

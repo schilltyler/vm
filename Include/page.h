@@ -3,7 +3,7 @@
 
 #include <stdio.h>
 #include <windows.h>
-#include "../Include/pageTable.h"
+#include "../Include/pagetable.h"
 
 
 // this is a PFN *Entry*
@@ -24,6 +24,8 @@ typedef struct page {
 typedef struct listhead {
     struct listhead* flink;
     struct listhead* blink;
+    // increment in list insert and pop
+    ULONG64 list_size;
 } listhead_t;
 
 // get page from pfn
