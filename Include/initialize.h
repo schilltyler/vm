@@ -10,6 +10,8 @@ extern PTE* pte_base;
 extern PULONG_PTR vmem_base;
 extern page_t* pfn_base;
 extern listhead_t free_list;
+extern listhead_t standby_list;
+extern listhead_t modified_list;
 extern ULONG_PTR num_ptes;
 extern ULONG_PTR physical_page_count;
 extern unsigned i;
@@ -35,6 +37,9 @@ extern ULONG_PTR virtual_address_size_in_unsigned_chunks;
 
 // Global Synchronization
 extern HANDLE trim_event;
+extern HANDLE modify_event;
+extern HANDLE fault_event;
+
 //extern HANDLE fault_event;
 extern HANDLE* threads;
 extern CRITICAL_SECTION pte_lock;

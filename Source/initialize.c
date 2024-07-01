@@ -11,6 +11,8 @@ PTE* pte_base;
 PULONG_PTR vmem_base;
 page_t* pfn_base;
 listhead_t free_list;
+listhead_t standby_list;
+listhead_t modified_list;
 ULONG_PTR num_ptes;
 ULONG_PTR physical_page_count;
 unsigned i;
@@ -94,6 +96,7 @@ BOOL GetPrivilege (VOID)
 VOID initialize_events(VOID) 
 {
     trim_event = CreateEvent(NULL, FALSE, FALSE, NULL);
+    fault_event = CreateEvent(NULL, FALSE, FALSE, NULL);
 }
 
 VOID initialize_threads(VOID)
@@ -173,6 +176,8 @@ VOID initialize_pte_metadata(VOID)
     }
 
     memset(pte_base, 0, num_pte_bytes);
+
+    InitializeCriticalSection(&pte_lock);
 }
 
 VOID initialize_pfn_metadata(VOID)

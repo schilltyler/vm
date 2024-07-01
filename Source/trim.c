@@ -4,6 +4,7 @@
 #include "../Include/pagetable.h"
 #include "../Include/initialize.h"
 
+HANDLE modify_event;
 
 void trim_thread(void* context) {
 
@@ -18,8 +19,21 @@ void trim_thread(void* context) {
 
         for (PPTE trim_pte = pte_base; trim_pte < pte_base + num_ptes; trim_pte ++) {
         
-            // found our page, let's trim
             if (trim_pte->memory.valid == 1) {
+
+                #if 0
+                Set all valid ptes to transition (they will be added to modified list)
+
+                ppage_t* curr_page = page_from_pfn(trim_pte->memory.frame_number, pfn_base);
+
+                trim_pte->transition.always_zero = 0;
+                trim_pte->transition.frame_number = trim_pte->memory.frame_number;
+                trim_pte->transition.always_zero2 = 0;
+
+                list_insert(&modified_list, curr_page);
+
+                SetEvent(modify_event);
+                #endif
 
                 page_t* curr_page = page_from_pfn(trim_pte->memory.frame_number, pfn_base);
 
@@ -29,30 +43,40 @@ void trim_thread(void* context) {
                 if (MapUserPhysicalPages (trim_va, 1, NULL) == FALSE) {
 
                     printf ("full_virtual_memory_test : could not unmap trim_va %p\n", trim_va);
-                    
-                    LeaveCriticalSection(&pte_lock);
 
-                    return;
+                    DebugBreak();
+                    
+                    continue;
+
                 }
 
                 // set valid bit to 0
                 trim_pte->memory.valid = 0;
                 trim_pte->memory.frame_number = 0;
 
-                // this is really going to end up going to modified or standby list
                 // if going to put on standby, DO NOT ZERO frame number
-                // if put on stanby, set standby event (calling anyone who wants a page that there is one now on standby list)
-                // if put on modified, set modified event (memcopying)
-                // mark trim_pte as transition_pte
+                // if put on standby, set standby event (calling anyone who wants a page that there is one now on standby list)
                 // page fault function will need to wait until this thread is finished to start consuming pages again (new event)
                 list_insert(&free_list, curr_page);
-
-                LeaveCriticalSection(&pte_lock);
 
             }
         }
 
         LeaveCriticalSection(&pte_lock);
+        SetEvent(fault_event);
+    }
+
+}
+
+// goal here is to copy the contents to disk and then redistribute the physical frame via the standby list
+void modified_thread(void* context) {
+
+    context = context;
+
+    while (TRUE) {
+
+        WaitForSingleObject(modify_event, INFINITE);
+
     }
 
 }

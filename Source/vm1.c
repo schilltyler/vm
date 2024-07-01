@@ -17,6 +17,14 @@ VOID full_virtual_memory_test (VOID)
 {
     initialize_system();
 
+    // create standby list, not populated yet though
+    standby_list.flink = &standby_list;
+    standby_list.blink = &standby_list;
+
+    // create modified list, not populated yet though
+    modified_list.flink = &modified_list;
+    modified_list.blink = &modified_list;
+
     // create free list, then populate it with physical frame numbers
     free_list.flink = &free_list;
     free_list.blink = &free_list;
@@ -63,10 +71,6 @@ VOID full_virtual_memory_test (VOID)
         if (page_faulted) {
 
             fault_result = handle_page_fault(arbitrary_va);
-
-            if (fault_result == ERROR) {
-                return;
-            }
 
             i --;
 

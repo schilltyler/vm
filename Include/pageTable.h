@@ -15,16 +15,22 @@ typedef struct {
 // these pages are ready to be used (pa + va not linked)
 typedef struct {
     ULONG64 always_zero:1;
-    ULONG64 disc_address:40; // tells where to find data on disc
+    ULONG64 disk_address:40; // tells where to find data on disc
     ULONG64 on_disc:1; // tells us whether we have written data to disc yet
-} invalid_pte;
+} disk_pte;
+
+typedef struct {
+    ULONG64 always_zero:1;
+    ULONG64 frame_number:40;
+    ULONG64 always_zero2:1;
+} transition_pte;
 
 // PTE could have multiple states (don't need bits for all of them)
 typedef struct {
     union {
         valid_pte memory;
-        invalid_pte disc;
-        // TS: what does this mean exactly?
+        disk_pte disk;
+        transition_pte transition;
         ULONG64 entire_format;
     };
 } PTE, *PPTE;

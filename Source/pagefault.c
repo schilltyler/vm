@@ -3,13 +3,20 @@
 #include "../Include/pagetable.h"
 #include "../Include/initialize.h"
 
+// TS: Not able to map everything
+
 #define SUCCESS 1
 #define ERROR 0
 
 CRITICAL_SECTION pte_lock;
+HANDLE fault_event;
 
 // Queue this to start back up again after trimming is done
 int handle_page_fault(PULONG_PTR virtual_address) {
+
+    //WaitForSingleObject();
+
+    page_t* free_page;
 
     PPTE pte = pte_from_va(virtual_address);
 
@@ -20,7 +27,18 @@ int handle_page_fault(PULONG_PTR virtual_address) {
         return SUCCESS;
     }
     
-    #if 0 
+    #if 0
+    else {
+        if (pte->transition.always_zero2 == 0) {
+            free_page = page_from_pfn(pte->transition.frame_number);
+            pte->memory.valid == 1;
+            pte->memory.frame_number = pte->transition.frame_number;
+        }
+        else {
+            
+        }
+    }
+
     if pte = 0
         do below
     else
@@ -36,25 +54,32 @@ int handle_page_fault(PULONG_PTR virtual_address) {
             done
     #endif
 
-    page_t* free_page = list_pop(&free_list);
+    free_page = list_pop(&free_list);
 
-    // free list does not have any pages left
-    // so . . . trim random active page
+    if (free_page == NULL) {
+        
+        LeaveCriticalSection(&pte_lock);
+        
+        WaitForSingleObject(fault_event, INFINITE);
+
+        return ERROR;
+    }
+
+
     #if 0
     if (free_page == NULL) {
 
         free_page = list_pop(&standby_list);
 
-        if can't get from standby
-            release locks, then wait here until free or standby page appears (set other event)
-            retry everything (return to caller)
-        else
-            we're good, do all of the pte stuff below as if it was a free page
+        if (free_page == NULL) {
+
+            LeaveCriticalSection(&pte_lock);
+            SetEvent(trim_event);
+            return SUCCESS;
+        }
 
     }
     #endif
-
-    // convert from 
 
     ULONG64 pfn = pfn_from_page(free_page, pfn_base);
 
@@ -62,10 +87,10 @@ int handle_page_fault(PULONG_PTR virtual_address) {
 
         printf ("full_virtual_memory_test : could not map VA %p to page %llX\n", virtual_address, pfn);
 
+        LeaveCriticalSection(&pte_lock);
+
         return ERROR;
     }
-
-    
 
     pte->memory.valid = 1;
     pte->memory.frame_number = pfn;
@@ -78,9 +103,10 @@ int handle_page_fault(PULONG_PTR virtual_address) {
 
     // if getting this page put us below 10% pages left on combined free and standby list (might want to set trim event)
     // below 20% might want to age (talked about dynamic algorithm)
-    if (free_list.list_size < physical_page_count * 0.15) {
+    if (free_list.list_size < physical_page_count / 4) {
         SetEvent(trim_event);
     }
+    
 
     return SUCCESS;
 }
