@@ -37,7 +37,7 @@ extern ULONG_PTR virtual_address_size_in_unsigned_chunks;
 
 // Global Synchronization
 extern HANDLE trim_event;
-extern HANDLE modify_event;
+extern HANDLE disk_write_event;
 extern HANDLE fault_event;
 
 //extern HANDLE fault_event;

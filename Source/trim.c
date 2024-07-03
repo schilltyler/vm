@@ -21,10 +21,16 @@ void trim_thread(void* context) {
         
             if (trim_pte->memory.valid == 1) {
 
-                #if 0
-                Set all valid ptes to transition (they will be added to modified list)
+                page_t* curr_page = page_from_pfn(trim_pte->memory.frame_number, pfn_base);
 
-                ppage_t* curr_page = page_from_pfn(trim_pte->memory.frame_number, pfn_base);
+                trim_pte->transition.always_zero = 0;
+                trim_pte->transition.always_zero2 = 0;
+
+                list_insert(&standby_list, curr_page);
+
+                // Set all valid ptes to transition (they will be added to modified list)
+                #if 0
+                page_t* curr_page = page_from_pfn(trim_pte->memory.frame_number, pfn_base);
 
                 trim_pte->transition.always_zero = 0;
                 trim_pte->transition.frame_number = trim_pte->memory.frame_number;
@@ -35,6 +41,17 @@ void trim_thread(void* context) {
                 SetEvent(modify_event);
                 #endif
 
+                #if 0
+                page_t* curr_page = page_from_pfn(trim_pte->memory.frame_number, pfn_base);
+
+                trim_pte->transition.always_zero = 0;
+                trim_pte->transition.always_zero2 = 0;
+                trim_pte->transition.frame_number = trim_pte->memory.frame_number;
+
+                list_insert(&standby_list, curr_page);
+                #endif
+
+                #if 0
                 page_t* curr_page = page_from_pfn(trim_pte->memory.frame_number, pfn_base);
 
                 PULONG_PTR trim_va = va_from_pte(trim_pte);
@@ -58,6 +75,7 @@ void trim_thread(void* context) {
                 // if put on standby, set standby event (calling anyone who wants a page that there is one now on standby list)
                 // page fault function will need to wait until this thread is finished to start consuming pages again (new event)
                 list_insert(&free_list, curr_page);
+                #endif
 
             }
         }
@@ -69,13 +87,13 @@ void trim_thread(void* context) {
 }
 
 // goal here is to copy the contents to disk and then redistribute the physical frame via the standby list
-void modified_thread(void* context) {
+void disk_write_thread(void* context) {
 
     context = context;
 
     while (TRUE) {
 
-        WaitForSingleObject(modify_event, INFINITE);
+        WaitForSingleObject(disk_write_event, INFINITE);
 
     }
 

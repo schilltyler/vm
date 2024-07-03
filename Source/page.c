@@ -41,6 +41,17 @@ void list_insert(listhead_t* listhead, page_t* new_page) {
     return;
 }
 
+void list_insert_tail(listhead_t* listhead, page_t* new_page) {
+
+    // set links
+    new_page->blink = (page_t*) listhead->blink;
+    new_page->flink = (page_t*) listhead;
+    listhead->blink = (listhead_t*) new_page;
+    listhead->blink->flink = (listhead_t*) new_page;
+
+
+}
+
 page_t* list_pop(listhead_t* listhead) {
 
     // check if list is empty

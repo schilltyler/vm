@@ -29,6 +29,8 @@ ULONG_PTR virtual_address_size_in_unsigned_chunks;
 
 // Global synchronization
 HANDLE trim_event;
+HANDLE fault_event;
+HANDLE disk_write_event;
 HANDLE* threads;
 
 // Windows stuff
@@ -97,12 +99,14 @@ VOID initialize_events(VOID)
 {
     trim_event = CreateEvent(NULL, FALSE, FALSE, NULL);
     fault_event = CreateEvent(NULL, FALSE, FALSE, NULL);
+    disk_write_event = CreateEvent(NULL, FALSE, FALSE, NULL);
 }
 
 VOID initialize_threads(VOID)
 {
-    threads = (HANDLE*) malloc(sizeof(HANDLE) * 1);
+    threads = (HANDLE*) malloc(sizeof(HANDLE) * 2);
     threads[0] = CreateThread(NULL, 0, (LPTHREAD_START_ROUTINE) trim_thread, NULL, 0, NULL);
+    threads[1] = CreateThread(NULL, 0, (LPTHREAD_START_ROUTINE) disk_write_thread, NULL, 0, NULL);
 }
 
 VOID initialize_pages(VOID)
