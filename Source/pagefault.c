@@ -3,10 +3,10 @@
 #include "../Include/pagetable.h"
 #include "../Include/initialize.h"
 
-// TS: Not able to map everything
 
 #define SUCCESS 1
 #define ERROR 0
+#define FREE 0
 
 CRITICAL_SECTION pte_lock;
 
@@ -30,18 +30,46 @@ int handle_page_fault(PULONG_PTR virtual_address) {
 
     }
 
-    // TS: fix in case 0 is a valid frame num
-    else if (pte->transition.frame_number != 0) {
+    else if (pte->transition.rescuable == 1) {
 
         // Rescue modified page (standby right now)
+
+        ULONG64 pfn = pte->transition.frame_number;
+
+        free_page = list_unlink(&standby_list, pfn);
+
+        if (free_page == NULL) {
+
+            printf("Could not get page from standby\n");
+            DebugBreak();
+            LeaveCriticalSection(&pte_lock);
+            return ERROR;
+
+        }
+
+        if (MapUserPhysicalPages(virtual_address, 1, &pfn) == FALSE) {
+
+            printf("Could not remap standby rescue\n");
+
+            DebugBreak();
+                    
+            LeaveCriticalSection(&pte_lock);
+
+            return ERROR;
+
+        }
+                
         pte->memory.valid = 1;
+        pte->transition.rescuable = 0;
 
         LeaveCriticalSection(&pte_lock);
         return SUCCESS;
 
     }
 
-    else if (pte->disk.on_disc == 1) {
+    else if (pte->disk.on_disc == 0 && pte->disk.accessed == 1) {
+
+        DebugBreak();
 
         // Get new frame for disk contents
         free_page = list_pop(&free_list);
@@ -62,11 +90,30 @@ int handle_page_fault(PULONG_PTR virtual_address) {
 
         }
 
-        // TS: deal with getting contents from memory
+        // TS: doing the opposite of the mod writer
+        // TS: need to use temp va because VA is not mapped
+        mod_page_va2 = VirtualAlloc(NULL, PAGE_SIZE, MEM_RESERVE | MEM_PHYSICAL, PAGE_READWRITE);
 
+        if (mod_page_va2 == NULL) {
+
+            printf("Could not allocate mod page va2\n");
+
+            LeaveCriticalSection(&pte_lock);
+
+            return ERROR;
+
+        }
+
+        memcpy(mod_page_va2, &pagefile_contents[pte->disk.disk_address * PAGE_SIZE], PAGE_SIZE);
+
+        pagefile_state[pte->disk.disk_address] = FREE;
+
+        // continue to below and map VA to new PA
     }
 
     else {
+
+        // brand new VA; never been accessed before
 
         free_page = list_pop(&free_list);
 
@@ -77,6 +124,8 @@ int handle_page_fault(PULONG_PTR virtual_address) {
             if (free_page == NULL) {
                 
                 LeaveCriticalSection(&pte_lock);
+
+                SetEvent(trim_event);
         
                 WaitForSingleObject(fault_event, INFINITE);
 
@@ -84,19 +133,7 @@ int handle_page_fault(PULONG_PTR virtual_address) {
 
             }
 
-            // get old VA
-            PULONG_PTR old_addr = va_from_pte(free_page->pte);
-
-            // unmap this PA from old VA
-            if (MapUserPhysicalPages (old_addr, 1, NULL) == FALSE) {
-
-                printf ("full_virtual_memory_test : could not unmap trim_va %p\n", old_addr);
-
-                LeaveCriticalSection(&pte_lock);
-
-                return ERROR;
-            }
-
+            free_page->pte->transition.rescuable = 0;
             free_page->pte->transition.frame_number = 0;
 
             // continue to code below to map new VA

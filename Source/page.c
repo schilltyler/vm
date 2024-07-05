@@ -46,10 +46,10 @@ void list_insert_tail(listhead_t* listhead, page_t* new_page) {
     // set links
     new_page->blink = (page_t*) listhead->blink;
     new_page->flink = (page_t*) listhead;
-    listhead->blink = (listhead_t*) new_page;
     listhead->blink->flink = (listhead_t*) new_page;
+    listhead->blink = (listhead_t*) new_page;
 
-
+    listhead->list_size += 1;
 }
 
 page_t* list_pop(listhead_t* listhead) {
@@ -64,8 +64,24 @@ page_t* list_pop(listhead_t* listhead) {
     listhead->flink = listhead->flink->flink;
     listhead->flink->blink = listhead;
 
-    // increment list size
+    // decrement list size
     listhead->list_size -= 1;
 
     return popped_page;
+}
+
+page_t* list_unlink(listhead_t* listhead, ULONG64 pfn) {
+
+    if (listhead->flink == listhead) {
+        return NULL;
+    }
+
+    page_t* page = page_from_pfn(pfn, pfn_base);
+
+    // adjust links
+    page->flink->blink = page->blink;
+    page->blink->flink = page->flink;
+
+    return page;
+
 }

@@ -40,4 +40,7 @@ void list_insert(listhead_t* listhead, page_t* new_page);
 // Take a page from the list
 page_t* list_pop(listhead_t* listhead);
 
+// Take a page from anywhere in the list
+page_t* list_unlink(listhead_t* listhead, ULONG64 pfn);
+
 #endif

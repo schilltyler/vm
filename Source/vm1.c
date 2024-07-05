@@ -41,6 +41,7 @@ VOID full_virtual_memory_test (VOID)
     srand (time (NULL));
     int fault_result;
 
+    // TS: make this a local variable (when you have multiple page fault threads this could get complicated as a global)
     arbitrary_va = NULL;
 
     for (i = 0; i < MB (1); i += 1) {

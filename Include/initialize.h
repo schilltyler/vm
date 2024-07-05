@@ -5,6 +5,14 @@
 #include "../Include/pagetable.h"
 #include "../Include/pagefault.h"
 
+// Global definitions
+#define PAGE_SIZE                   4096
+#define MB(x)                       ((x) * 1024 * 1024)
+#define VIRTUAL_ADDRESS_SIZE        MB(16)
+#define VIRTUAL_ADDRESS_SIZE_IN_UNSIGNED_CHUNKS        (VIRTUAL_ADDRESS_SIZE / sizeof (ULONG_PTR))
+#define NUMBER_OF_PHYSICAL_PAGES   ((VIRTUAL_ADDRESS_SIZE / PAGE_SIZE) / 64) // ~1% of virtual address space
+#define PAGEFILE_BLOCKS 100
+
 // Global variables
 extern PTE* pte_base;
 extern PULONG_PTR vmem_base;
@@ -25,14 +33,10 @@ extern PULONG_PTR physical_page_numbers;
 extern HANDLE physical_page_handle;
 extern ULONG_PTR virtual_address_size;
 extern ULONG_PTR virtual_address_size_in_unsigned_chunks;
-
-
-// Global definitions
-#define PAGE_SIZE                   4096
-#define MB(x)                       ((x) * 1024 * 1024)
-#define VIRTUAL_ADDRESS_SIZE        MB(16)
-#define VIRTUAL_ADDRESS_SIZE_IN_UNSIGNED_CHUNKS        (VIRTUAL_ADDRESS_SIZE / sizeof (ULONG_PTR))
-#define NUMBER_OF_PHYSICAL_PAGES   ((VIRTUAL_ADDRESS_SIZE / PAGE_SIZE) / 64) // ~1% of virtual address space
+extern UCHAR pagefile_contents[PAGEFILE_BLOCKS * PAGE_SIZE];
+extern UCHAR pagefile_state[PAGEFILE_BLOCKS];
+extern LPVOID mod_page_va;
+extern LPVOID mod_page_va2;
 
 
 // Global Synchronization

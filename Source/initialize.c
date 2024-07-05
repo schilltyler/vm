@@ -26,6 +26,10 @@ PULONG_PTR physical_page_numbers;
 HANDLE physical_page_handle;
 ULONG_PTR virtual_address_size;
 ULONG_PTR virtual_address_size_in_unsigned_chunks;
+UCHAR pagefile_contents[PAGEFILE_BLOCKS * PAGE_SIZE];
+UCHAR pagefile_state[PAGEFILE_BLOCKS];
+LPVOID mod_page_va;
+LPVOID mod_page_va2;
 
 // Global synchronization
 HANDLE trim_event;
