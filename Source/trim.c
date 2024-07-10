@@ -6,7 +6,6 @@
 
 HANDLE modify_event;
 
-// TS: have local PTE each time you update a PTE (in every file)
 
 void trim_thread(void* context) {
 
@@ -38,65 +37,66 @@ void trim_thread(void* context) {
 
                     printf ("full_virtual_memory_test : could not unmap trim_va %p\n", trim_va);
 
+                    DebugBreak();
+
                 }
 
                 new_contents.transition.frame_number = trim_pte->memory.frame_number;
                 new_contents.transition.rescuable = 1;
+                
                 *trim_pte = new_contents;
 
-                // TS: standby lock in future
-                list_insert(&standby_list, curr_page);
-
-                #if 0
+                EnterCriticalSection(&mod_lock);
+                curr_page->list_type = MODIFIED;
                 list_insert(&modified_list, curr_page);
-                SetEvent(disk_write_event);
-                #endif
+                LeaveCriticalSection(&mod_lock);
 
             }
         }
 
         LeaveCriticalSection(&pte_lock);
-        SetEvent(fault_event);
+        SetEvent(disk_write_event);
     }
 
 }
 
 
-#define FREE 0
-#define IN_USE 1
-
+#define DISK_BLOCK_FREE 0
+#define DISK_BLOCK_IN_USE 1
 
 // goal here is to copy the contents to disk and then redistribute the physical frame via the standby list
 void disk_write_thread(void* context) {
 
     context = context;
 
+    mod_page_va = VirtualAlloc(NULL, PAGE_SIZE, MEM_RESERVE | MEM_PHYSICAL, PAGE_READWRITE);
+
+    if (mod_page_va == NULL) {
+    
+        printf("Could not allocate mod page va\n");
+
+        return;
+
+    }
+
     while (TRUE) {
 
-    // Use for loop to go through all modified pages?
+        // TS: for loop to pop many modified pages when this is called
 
         WaitForSingleObject(disk_write_event, INFINITE);
-
-        mod_page_va = VirtualAlloc(NULL, PAGE_SIZE, MEM_RESERVE | MEM_PHYSICAL, PAGE_READWRITE);
-
-        if (mod_page_va == NULL) {
-            //TS: fix this
-            printf("Could not allocate mod page va\n");
-
-            return;
-
-        }
-
-        //EnterCriticalSection(&pte_lock);
-        // TS: going to need modified lock
+        
+        EnterCriticalSection(&mod_lock);
         page_t* curr_page = list_pop(&modified_list);
 
+        
     
         if (curr_page == NULL) {
 
+            LeaveCriticalSection(&mod_lock);
+
             printf("Could not pop from modified list\n");
 
-            return;
+            continue;
 
         }
 
@@ -104,9 +104,9 @@ void disk_write_thread(void* context) {
 
         for (i = 0; i < PAGEFILE_BLOCKS; i ++) {
 
-            if (pagefile_state[i] == FREE) {
+            if (pagefile_state[i] == DISK_BLOCK_FREE) {
 
-                pagefile_state[i] = IN_USE;
+                pagefile_state[i] = DISK_BLOCK_IN_USE;
 
                 break;
 
@@ -117,14 +117,18 @@ void disk_write_thread(void* context) {
         if (i == PAGEFILE_BLOCKS) {
 
             list_insert(&modified_list, curr_page);
+            LeaveCriticalSection(&mod_lock);
 
+            continue;
+            
         }
 
-        ULONG64 old_pfn = curr_page->pte->transition.frame_number;
+        
+        ULONG64 old_pfn = pfn_from_page(curr_page, pfn_base);
 
         if (MapUserPhysicalPages (mod_page_va, 1, &old_pfn) == FALSE) {
 
-            printf("full_virtual_memory_test : could not map VA %p to page %llX\n", mod_page_va, old_pfn);
+            printf("full_virtual_memory_test : could not map mod VA %p to page %llX\n", mod_page_va, old_pfn);
 
             DebugBreak();
 
@@ -134,21 +138,22 @@ void disk_write_thread(void* context) {
 
         if (MapUserPhysicalPages(mod_page_va, 1, NULL) == FALSE) {
 
-            printf("full_virtual_memory_test : could not unmap VA %p\n", mod_page_va);
+            printf("full_virtual_memory_test : could not unmap mod VA %p\n", mod_page_va);
 
             DebugBreak();
 
         }
 
-        curr_page->pte->disk.disk_address = i;
-        curr_page->pte->disk.on_disc = 1;
-        curr_page->pte->disk.accessed = 1;
-        // TS: standby lock
+        curr_page->disk_address = i;
+
+        EnterCriticalSection(&standby_lock);
         list_insert(&standby_list, curr_page);
+        curr_page->list_type = STANDBY;
 
-        //LeaveCriticalSection(&pte_lock);
+        LeaveCriticalSection(&standby_lock);
+        LeaveCriticalSection(&mod_lock);
 
-        //SetEvent(fault_event);
+        SetEvent(fault_event);
 
     }
 

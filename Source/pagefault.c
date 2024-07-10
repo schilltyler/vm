@@ -4,17 +4,10 @@
 #include "../Include/initialize.h"
 
 
-#define SUCCESS 1
-#define ERROR 0
-#define FREE 0
-
-CRITICAL_SECTION pte_lock;
+// TS: figure out why 2 faults on every address
 
 
-// Queue this to start back up again after trimming is done
 int handle_page_fault(PULONG_PTR virtual_address) {
-
-    //WaitForSingleObject();
 
     page_t* free_page;
 
@@ -23,6 +16,7 @@ int handle_page_fault(PULONG_PTR virtual_address) {
     // START LOCK HERE
     EnterCriticalSection(&pte_lock);
 
+    //#### VALID #####
     if (pte->memory.valid == 1) {
 
         LeaveCriticalSection(&pte_lock);
@@ -30,26 +24,70 @@ int handle_page_fault(PULONG_PTR virtual_address) {
 
     }
 
+    //#### STANDBY/MODIFIED RESCUE ####
     else if (pte->transition.rescuable == 1) {
 
-        // Rescue modified page (standby right now)
+        // TS: handle when the page is getting written but gets rescued
+        // you may have popped from modified list in trimmer, released lock, and now it got rescued
+        // however, technically the page is not on the mod list, but physically it has not been removed
+        // maybe set page_t flink and blink to null so that unlink returns error
 
         ULONG64 pfn = pte->transition.frame_number;
 
-        free_page = list_unlink(&standby_list, pfn);
+        free_page = page_from_pfn(pfn, pfn_base);
 
-        if (free_page == NULL) {
+        if (free_page->list_type == MODIFIED) {
 
-            printf("Could not get page from standby\n");
-            DebugBreak();
-            LeaveCriticalSection(&pte_lock);
-            return ERROR;
+            EnterCriticalSection(&mod_lock);
+            
+            if (free_page->list_type == MODIFIED) {
+
+                free_page = list_unlink(&modified_list, pfn);
+
+                if (free_page == NULL) {
+
+                    printf("Could not get page from modified\n");
+                    DebugBreak();
+                    LeaveCriticalSection(&mod_lock);
+                    LeaveCriticalSection(&pte_lock);
+                    return ERROR;
+
+                }
+
+            }
+
+            LeaveCriticalSection(&mod_lock);
+
+        }
+
+        if (free_page->list_type == STANDBY) {
+
+            EnterCriticalSection(&standby_lock);
+
+            if (free_page->list_type == STANDBY) {
+
+                // TS: unlink will always work
+                free_page = list_unlink(&standby_list, pfn);
+
+                if (free_page == NULL) {
+
+                    printf("Could not get page from standby\n");
+                    DebugBreak();
+                    LeaveCriticalSection(&standby_lock);
+                    LeaveCriticalSection(&pte_lock);
+                    return ERROR;
+
+                }
+
+            }
+            
+            LeaveCriticalSection(&standby_lock);
 
         }
 
         if (MapUserPhysicalPages(virtual_address, 1, &pfn) == FALSE) {
 
-            printf("Could not remap standby rescue\n");
+            printf("Could not remap modified rescue\n");
 
             DebugBreak();
                     
@@ -60,68 +98,36 @@ int handle_page_fault(PULONG_PTR virtual_address) {
         }
                 
         pte->memory.valid = 1;
+        // TS: make sure frame number is same bit offset
         pte->transition.rescuable = 0;
 
+        ULONG64 disk_addr = free_page->disk_address;
+
         LeaveCriticalSection(&pte_lock);
+
+        EnterCriticalSection(&mod_lock);
+        pagefile_state[disk_addr] = FREE;
+        LeaveCriticalSection(&mod_lock);
+
         return SUCCESS;
 
     }
 
-    else if (pte->disk.on_disc == 0 && pte->disk.accessed == 1) {
-
-        DebugBreak();
-
-        // Get new frame for disk contents
-        free_page = list_pop(&free_list);
-
-        if (free_page == NULL) {
-
-            free_page = list_pop(&standby_list);
-
-            if (free_page == NULL) {
-
-                LeaveCriticalSection(&pte_lock);
-
-                WaitForSingleObject(fault_event, INFINITE);
-
-                return ERROR;
-
-            }
-
-        }
-
-        // TS: doing the opposite of the mod writer
-        // TS: need to use temp va because VA is not mapped
-        mod_page_va2 = VirtualAlloc(NULL, PAGE_SIZE, MEM_RESERVE | MEM_PHYSICAL, PAGE_READWRITE);
-
-        if (mod_page_va2 == NULL) {
-
-            printf("Could not allocate mod page va2\n");
-
-            LeaveCriticalSection(&pte_lock);
-
-            return ERROR;
-
-        }
-
-        memcpy(mod_page_va2, &pagefile_contents[pte->disk.disk_address * PAGE_SIZE], PAGE_SIZE);
-
-        pagefile_state[pte->disk.disk_address] = FREE;
-
-        // continue to below and map VA to new PA
-    }
-
-    else {
+    // #### BRAND NEW #####
+    else if (pte->entire_format == 0) {
 
         // brand new VA; never been accessed before
 
         free_page = list_pop(&free_list);
 
         if (free_page == NULL) {
-
+            
+            EnterCriticalSection(&standby_lock);
             free_page = list_pop(&standby_list);
 
             if (free_page == NULL) {
+
+                LeaveCriticalSection(&standby_lock);
                 
                 LeaveCriticalSection(&pte_lock);
 
@@ -133,12 +139,120 @@ int handle_page_fault(PULONG_PTR virtual_address) {
 
             }
 
-            free_page->pte->transition.rescuable = 0;
-            free_page->pte->transition.frame_number = 0;
+            // TS: memset to 0 so we don't have residual old contents
+
+            free_page->pte->disk.always_zero2 = 0;
+            free_page->pte->disk.disk_address = free_page->disk_address;
+
+            LeaveCriticalSection(&standby_lock);
 
             // continue to code below to map new VA
         
         }
+    }
+
+    //#### ON DISK ####
+    else {
+
+        page_t* free_page;
+
+        free_page = list_pop(&free_list);
+
+        if (free_page == NULL) {
+
+            EnterCriticalSection(&standby_lock);
+            free_page = list_pop(&standby_list);
+
+            if (free_page == NULL) {
+
+                LeaveCriticalSection(&standby_lock);
+                LeaveCriticalSection(&pte_lock);
+
+                SetEvent(trim_event);
+        
+                WaitForSingleObject(fault_event, INFINITE);
+
+                return ERROR;
+
+            }
+
+            free_page->pte->disk.disk_address = free_page->disk_address;
+            free_page->pte->disk.always_zero2 = 0;
+
+            LeaveCriticalSection(&standby_lock);
+
+        }
+
+        // TS: move this to initialization file
+        mod_page_va2 = VirtualAlloc(NULL, PAGE_SIZE, MEM_RESERVE | MEM_PHYSICAL, PAGE_READWRITE);
+
+        if (mod_page_va2 == NULL) {
+
+            printf("Could not allocate mod va 2\n");
+
+            DebugBreak();
+
+            return ERROR;
+
+        }
+
+        ULONG64 pfn = pfn_from_page(free_page, pfn_base);
+
+        if (MapUserPhysicalPages(mod_page_va2, 1, &pfn) == FALSE) {
+
+            printf("Could not map mod va 2\n");
+
+            LeaveCriticalSection(&pte_lock);
+
+            DebugBreak();
+
+        }
+
+        void* src = &pagefile_contents[pte->disk.disk_address * PAGE_SIZE];
+
+        memcpy(mod_page_va2, src, PAGE_SIZE);
+
+        if (MapUserPhysicalPages(mod_page_va2, 1, NULL) == FALSE) {
+
+            printf("Could not unmap mod va 2\n");
+
+            LeaveCriticalSection(&pte_lock);
+
+            DebugBreak();
+
+        }
+
+        PTE new_contents;
+
+        ULONG64 disk_addr = pte->disk.disk_address;
+
+        new_contents.entire_format = 0;
+
+        new_contents.memory.valid = 1;
+        new_contents.memory.frame_number = pfn;
+        
+        *pte = new_contents;
+
+        free_page->pte = pte;
+
+        if (MapUserPhysicalPages(virtual_address, 1, &pfn) == FALSE) {
+
+            printf("Could not map disk VA to page\n");
+
+            LeaveCriticalSection(&pte_lock);
+
+            DebugBreak();
+
+        }
+
+        LeaveCriticalSection(&pte_lock);
+
+        EnterCriticalSection(&mod_lock);
+        pagefile_state[disk_addr] = FREE;
+        LeaveCriticalSection(&mod_lock);
+
+        return SUCCESS;
+
     }
 
 
@@ -148,6 +262,8 @@ int handle_page_fault(PULONG_PTR virtual_address) {
     if (MapUserPhysicalPages (virtual_address, 1, &pfn) == FALSE) {
 
         printf ("full_virtual_memory_test : could not map VA %p to page %llX\n", virtual_address, pfn);
+
+        DebugBreak();
 
         LeaveCriticalSection(&pte_lock);
 

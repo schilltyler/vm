@@ -82,6 +82,8 @@ page_t* list_unlink(listhead_t* listhead, ULONG64 pfn) {
     page->flink->blink = page->blink;
     page->blink->flink = page->flink;
 
+    listhead->list_size -= 1;
+
     return page;
 
 }

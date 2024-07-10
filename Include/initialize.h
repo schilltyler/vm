@@ -11,7 +11,14 @@
 #define VIRTUAL_ADDRESS_SIZE        MB(16)
 #define VIRTUAL_ADDRESS_SIZE_IN_UNSIGNED_CHUNKS        (VIRTUAL_ADDRESS_SIZE / sizeof (ULONG_PTR))
 #define NUMBER_OF_PHYSICAL_PAGES   ((VIRTUAL_ADDRESS_SIZE / PAGE_SIZE) / 64) // ~1% of virtual address space
-#define PAGEFILE_BLOCKS 100
+#define PAGEFILE_BLOCKS ((VIRTUAL_ADDRESS_SIZE / PAGE_SIZE) - NUMBER_OF_PHYSICAL_PAGES + 1)
+
+#define SUCCESS 1
+#define ERROR 0
+#define FREE 0
+#define MODIFIED 0
+#define STANDBY 1
+
 
 // Global variables
 extern PTE* pte_base;
@@ -47,6 +54,8 @@ extern HANDLE fault_event;
 //extern HANDLE fault_event;
 extern HANDLE* threads;
 extern CRITICAL_SECTION pte_lock;
+extern CRITICAL_SECTION mod_lock;
+extern CRITICAL_SECTION standby_lock;
 
 
 // Functions

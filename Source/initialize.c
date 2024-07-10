@@ -30,6 +30,9 @@ UCHAR pagefile_contents[PAGEFILE_BLOCKS * PAGE_SIZE];
 UCHAR pagefile_state[PAGEFILE_BLOCKS];
 LPVOID mod_page_va;
 LPVOID mod_page_va2;
+CRITICAL_SECTION pte_lock;
+CRITICAL_SECTION mod_lock;
+CRITICAL_SECTION standby_lock;
 
 // Global synchronization
 HANDLE trim_event;
@@ -104,6 +107,9 @@ VOID initialize_events(VOID)
     trim_event = CreateEvent(NULL, FALSE, FALSE, NULL);
     fault_event = CreateEvent(NULL, FALSE, FALSE, NULL);
     disk_write_event = CreateEvent(NULL, FALSE, FALSE, NULL);
+
+    InitializeCriticalSection(&mod_lock);
+    InitializeCriticalSection(&standby_lock);
 }
 
 VOID initialize_threads(VOID)
@@ -227,3 +233,33 @@ VOID initialize_system(VOID)
 
     initialize_threads();
 }
+
+#if 0
+DiskRead() {
+
+    memcpy();
+
+    for (int i = 0; i < 1000000; i ++) {
+    
+        // TS: how to spin?
+    
+    }
+
+}
+
+DiskWrite() {
+
+    memcpy();
+
+    for (int i = 0; i < 1000000; i ++) {
+    
+        // TS: how to spin?
+    
+    }
+
+}
+
+// TS: not sure how to do critical section initializers
+
+#endif
+

@@ -15,15 +15,15 @@ typedef struct {
 // these pages are ready to be used (pa + va not linked)
 typedef struct {
     ULONG64 always_zero:1;
-    ULONG64 disk_address:40; // tells where to find data on disc
-    ULONG64 on_disc:1; // tells us whether we have written data to disc yet
-    ULONG64 accessed:1;
+    ULONG64 disk_address:40; // tells where to find data on disk
+    ULONG64 always_zero2:1; // this is at same location as rescue
 } disk_pte;
 
 typedef struct {
     ULONG64 always_zero:1;
     ULONG64 frame_number:40;
     ULONG64 rescuable:1;
+    //ULONG64 list:1; // differentiate between modified and standby. ** Get from page_t**
 } transition_pte;
 
 // PTE could have multiple states (don't need bits for all of them)

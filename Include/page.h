@@ -6,6 +6,14 @@
 #include "../Include/pagetable.h"
 
 
+typedef struct listhead {
+    struct listhead* flink;
+    struct listhead* blink;
+    // increment in list insert and pop
+    ULONG64 list_size;
+} listhead_t;
+
+
 // this is a PFN *Entry*
 typedef struct page {
 
@@ -14,19 +22,16 @@ typedef struct page {
     struct page* blink;
 
     // TS: fix this later
-    ULONG64 structure_pad;
+    ULONG64 disk_address;
 
     // this page (that has the physical page address) is connected to a va through this
     PTE* pte;
 
-} page_t;
+    ULONG64 list_type:2;
 
-typedef struct listhead {
-    struct listhead* flink;
-    struct listhead* blink;
-    // increment in list insert and pop
-    ULONG64 list_size;
-} listhead_t;
+    ULONG64 padding[3];
+
+} page_t;
 
 // get page from pfn
 extern page_t* page_from_pfn(ULONG64 pfn, page_t* pfn_base);
