@@ -69,93 +69,87 @@ void disk_write_thread(void* context) {
 
     context = context;
 
-    mod_page_va = VirtualAlloc(NULL, PAGE_SIZE, MEM_RESERVE | MEM_PHYSICAL, PAGE_READWRITE);
-
-    if (mod_page_va == NULL) {
-    
-        printf("Could not allocate mod page va\n");
-
-        return;
-
-    }
-
     while (TRUE) {
 
-        // TS: for loop to pop many modified pages when this is called
-
         WaitForSingleObject(disk_write_event, INFINITE);
-        
-        EnterCriticalSection(&mod_lock);
-        page_t* curr_page = list_pop(&modified_list);
 
-        
-    
-        if (curr_page == NULL) {
+        // TS: this modified list size could change because we don't have lock
+        // #define for amount to write
+        for (int i = 0; i < modified_list.list_size; i ++) {
+            
+            EnterCriticalSection(&mod_lock);
+            page_t* curr_page = list_pop(&modified_list);
 
-            LeaveCriticalSection(&mod_lock);
+            
 
-            printf("Could not pop from modified list\n");
+            if (curr_page == NULL) {
 
-            continue;
+                LeaveCriticalSection(&mod_lock);
 
-        }
-
-        unsigned i;
-
-        for (i = 0; i < PAGEFILE_BLOCKS; i ++) {
-
-            if (pagefile_state[i] == DISK_BLOCK_FREE) {
-
-                pagefile_state[i] = DISK_BLOCK_IN_USE;
+                printf("Could not pop from modified list\n");
 
                 break;
 
             }
 
-        }
+            unsigned i;
 
-        if (i == PAGEFILE_BLOCKS) {
+            for (i = 0; i < pagefile_blocks; i ++) {
 
-            list_insert(&modified_list, curr_page);
+                if (pagefile_state[i] == DISK_BLOCK_FREE) {
+
+                    pagefile_state[i] = DISK_BLOCK_IN_USE;
+
+                    break;
+
+                }
+
+            }
+
+            if (i == pagefile_blocks) {
+
+                list_insert(&modified_list, curr_page);
+                LeaveCriticalSection(&mod_lock);
+
+                continue;
+                
+            }
+
+            
+            ULONG64 old_pfn = pfn_from_page(curr_page, pfn_base);
+
+            if (MapUserPhysicalPages (mod_page_va, 1, &old_pfn) == FALSE) {
+
+                printf("full_virtual_memory_test : could not map mod VA %p to page %llX\n", mod_page_va, old_pfn);
+
+                DebugBreak();
+
+            }
+
+            memcpy(&pagefile_contents[i * PAGE_SIZE], mod_page_va, PAGE_SIZE);
+
+            if (MapUserPhysicalPages(mod_page_va, 1, NULL) == FALSE) {
+
+                printf("full_virtual_memory_test : could not unmap mod VA %p\n", mod_page_va);
+
+                DebugBreak();
+
+            }
+
+            curr_page->disk_address = i;
+
+            EnterCriticalSection(&standby_lock);
+            list_insert(&standby_list, curr_page);
+            curr_page->list_type = STANDBY;
+
+            LeaveCriticalSection(&standby_lock);
             LeaveCriticalSection(&mod_lock);
 
-            continue;
-            
-        }
-
-        
-        ULONG64 old_pfn = pfn_from_page(curr_page, pfn_base);
-
-        if (MapUserPhysicalPages (mod_page_va, 1, &old_pfn) == FALSE) {
-
-            printf("full_virtual_memory_test : could not map mod VA %p to page %llX\n", mod_page_va, old_pfn);
-
-            DebugBreak();
+            SetEvent(fault_event);
 
         }
 
-        memcpy(&pagefile_contents[i * PAGE_SIZE], mod_page_va, PAGE_SIZE);
-
-        if (MapUserPhysicalPages(mod_page_va, 1, NULL) == FALSE) {
-
-            printf("full_virtual_memory_test : could not unmap mod VA %p\n", mod_page_va);
-
-            DebugBreak();
-
-        }
-
-        curr_page->disk_address = i;
-
-        EnterCriticalSection(&standby_lock);
-        list_insert(&standby_list, curr_page);
-        curr_page->list_type = STANDBY;
-
-        LeaveCriticalSection(&standby_lock);
-        LeaveCriticalSection(&mod_lock);
-
-        SetEvent(fault_event);
-
-    }
+    }    
 
 }
 
