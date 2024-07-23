@@ -2,6 +2,7 @@
 #include <windows.h>
 #include "../Include/page.h"
 #include "../Include/initialize.h"
+#include "../Include/debug.h"
 
 // May need this later
 //#define byte_offset(va) ((ULONG_PTR) va & ~(PAGE_SIZE - 1))
@@ -35,7 +36,9 @@ void list_insert(listhead_t* listhead, page_t* new_page) {
     listhead->flink = (listhead_t*) new_page;
     new_page->blink = (page_t*) listhead;
 
+    #if DEBUG_PAGE
     CaptureStackBackTrace(0, 8, new_page->backtrace, NULL);
+    #endif
 
     // increment list size
     listhead->list_size += 1;
@@ -69,7 +72,9 @@ page_t* list_pop(listhead_t* listhead) {
     popped_page->flink = NULL;
     popped_page->blink = NULL;
 
+    #if DEBUG_PAGE
     CaptureStackBackTrace(0, 8, popped_page->backtrace, NULL);
+    #endif
 
     // decrement list size
     listhead->list_size -= 1;
@@ -89,7 +94,9 @@ void list_unlink(listhead_t* listhead, ULONG64 pfn) {
     page->flink->blink = page->blink;
     page->blink->flink = page->flink;
 
+    #if DEBUG_PAGE
     CaptureStackBackTrace(0, 8, page->backtrace, NULL);
+    #endif
 
     page->flink = NULL;
     page->blink = NULL;

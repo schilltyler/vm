@@ -4,6 +4,7 @@
 #include <stdio.h>
 #include <windows.h>
 #include "../Include/pagetable.h"
+#include "../Include/debug.h"
 
 
 typedef struct listhead {
@@ -24,19 +25,15 @@ typedef struct page {
     // TS: fix this later
     ULONG64 disk_address;
 
-    // this page (that has the physical page address) is connected to a va through this
     PTE* pte;
 
     ULONG64 list_type:2;
 
     ULONG64 padding[3];
 
-    /**
-     * TS: don't want to keep this longterm
-     * just for debugging
-     * Turn it on/off for debugging
-     */
+    #if DEBUG_PAGE
     PVOID backtrace[8];
+    #endif
 
 } page_t;
 

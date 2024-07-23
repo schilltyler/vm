@@ -3,9 +3,8 @@
 
 #include <stdio.h>
 #include <windows.h>
-//#include "initialize.h"
+#include "../Include/debug.h"
 
-#define DEBUG_PTE_LOCK 1
 
 
 // physical + va linked and this page is currently being used
