@@ -35,6 +35,8 @@ void list_insert(listhead_t* listhead, page_t* new_page) {
     listhead->flink = (listhead_t*) new_page;
     new_page->blink = (page_t*) listhead;
 
+    CaptureStackBackTrace(0, 8, new_page->backtrace, NULL);
+
     // increment list size
     listhead->list_size += 1;
 
@@ -64,26 +66,37 @@ page_t* list_pop(listhead_t* listhead) {
     listhead->flink = listhead->flink->flink;
     listhead->flink->blink = listhead;
 
+    popped_page->flink = NULL;
+    popped_page->blink = NULL;
+
+    CaptureStackBackTrace(0, 8, popped_page->backtrace, NULL);
+
     // decrement list size
     listhead->list_size -= 1;
 
     return popped_page;
 }
 
-page_t* list_unlink(listhead_t* listhead, ULONG64 pfn) {
+void list_unlink(listhead_t* listhead, ULONG64 pfn) {
 
     if (listhead->flink == listhead) {
-        return NULL;
+        DebugBreak();
     }
 
-    page_t* page = page_from_pfn(pfn, pfn_base);
+    page_t* page = page_from_pfn(pfn, g_pfn_base);
 
     // adjust links
     page->flink->blink = page->blink;
     page->blink->flink = page->flink;
 
+    CaptureStackBackTrace(0, 8, page->backtrace, NULL);
+
+    page->flink = NULL;
+    page->blink = NULL;
+
+    // TS: make list type as active
     listhead->list_size -= 1;
 
-    return page;
+    return;
 
 }

@@ -12,50 +12,57 @@
 #define FREE 0
 #define MODIFIED 0
 #define STANDBY 1
+#define ACTIVE 2
+
+/**
+ * TS:
+ * Go through all global variables and add a "g_" or
+ * something before the name of each one so that
+ * I always know scope of particular variable
+ */
 
 // Global lists
-extern listhead_t free_list;
-extern listhead_t standby_list;
-extern listhead_t modified_list;
+extern listhead_t g_free_list;
+extern listhead_t g_standby_list;
+extern listhead_t g_modified_list;
 
 // Global pte variables
-extern ULONG_PTR num_ptes;
-extern PTE* pte_base;
+extern ULONG_PTR g_num_ptes;
+extern PTE* g_pte_base;
+extern PAGE_TABLE* g_pagetable;
 
 // Global PA variables
-extern ULONG_PTR physical_page_count;
-extern ULONG_PTR number_of_physical_pages;
-extern PULONG_PTR physical_page_numbers;
-extern page_t* pfn_base;
+extern ULONG_PTR g_physical_page_count;
+extern PULONG_PTR g_physical_page_numbers;
+extern page_t* g_pfn_base;
 
 // Global VA variables
-extern ULONG_PTR virtual_address_size;
-extern ULONG_PTR virtual_address_size_in_unsigned_chunks;
-extern PULONG_PTR vmem_base;
+extern ULONG_PTR g_virtual_address_size;
+extern ULONG_PTR g_virtual_address_size_in_unsigned_chunks;
+extern PULONG_PTR g_vmem_base;
 
 // Global disk-write variables
-extern ULONG_PTR pagefile_blocks;
-extern UCHAR* pagefile_contents;
-extern UCHAR* pagefile_state;
-extern LPVOID mod_page_va;
-extern LPVOID mod_page_va2;
+extern ULONG_PTR g_pagefile_blocks;
+extern UCHAR* g_pagefile_contents;
+extern UCHAR* g_pagefile_state;
+extern LPVOID g_mod_page_va;
 
 // Global faulting variables
-extern int num_fault_threads;
-extern int va_iterate_type;
-extern int num_faults;
+extern int g_num_fault_threads;
+extern int g_va_iterate_type;
+extern int g_num_faults;
 
 // Global Events/Threads
-extern HANDLE trim_event;
-extern HANDLE disk_write_event;
-extern HANDLE fault_event;
-extern HANDLE* threads;
+extern HANDLE g_trim_event;
+extern HANDLE g_disk_write_event;
+extern HANDLE g_fault_event;
+extern HANDLE* g_threads;
 extern VOID fault_thread();
 
 // Global Locks
-extern CRITICAL_SECTION pte_lock;
-extern CRITICAL_SECTION mod_lock;
-extern CRITICAL_SECTION standby_lock;
+extern CRITICAL_SECTION g_mod_lock;
+extern CRITICAL_SECTION g_standby_lock;
+extern CRITICAL_SECTION g_free_lock;
 
 
 // Global Functions

@@ -31,6 +31,13 @@ typedef struct page {
 
     ULONG64 padding[3];
 
+    /**
+     * TS: don't want to keep this longterm
+     * just for debugging
+     * Turn it on/off for debugging
+     */
+    PVOID backtrace[8];
+
 } page_t;
 
 // get page from pfn
@@ -46,6 +53,6 @@ void list_insert(listhead_t* listhead, page_t* new_page);
 page_t* list_pop(listhead_t* listhead);
 
 // Take a page from anywhere in the list
-page_t* list_unlink(listhead_t* listhead, ULONG64 pfn);
+void list_unlink(listhead_t* listhead, ULONG64 pfn);
 
 #endif

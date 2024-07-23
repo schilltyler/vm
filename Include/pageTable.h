@@ -3,6 +3,9 @@
 
 #include <stdio.h>
 #include <windows.h>
+//#include "initialize.h"
+
+#define DEBUG_PTE_LOCK 1
 
 
 // physical + va linked and this page is currently being used
@@ -37,14 +40,32 @@ typedef struct {
 } PTE, *PPTE;
 
 typedef struct {
-    PTE pte_list; 
-    ULONG64 num_virtual_pages;
+
+    CRITICAL_SECTION lock;
+    ULONG64 region;
+
+    #if DEBUG_PTE_LOCK
+
+    ULONG64 owning_thread;
+
+    // use getcurrentthreadid() with this
+
+    #endif
+
+} PTE_LOCK;
+
+typedef struct {
+
+    PTE_LOCK* pte_lock_sections;
+
 } PAGE_TABLE;
 
 
 // Function prototypes
 PPTE pte_from_va(PULONG64 va);
 PULONG_PTR va_from_pte(PTE* pte);
+PAGE_TABLE* create_pagetable();
+PTE_LOCK* get_pte_lock(PULONG_PTR virtual_address);
 //TS: look into adding the other two functions here
 
 #endif

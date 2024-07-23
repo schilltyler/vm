@@ -2,6 +2,6 @@
 #define VM_PAGE_FAULT_H
 
 // Function prototypes
-int handle_page_fault(PULONG_PTR virtual_address);
+int handle_page_fault(PULONG_PTR virtual_address, LPVOID mod_page_va2);
 
 #endif
