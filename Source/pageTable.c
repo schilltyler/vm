@@ -31,8 +31,7 @@ PAGE_TABLE* create_pagetable() {
 
     }
 
-    // Going with 128 pte regions, which means 32 ptes per region
-    for (int i = 0; i < 128; i ++) {
+    for (int i = 0; i < NUM_PTE_REGIONS; i ++) {
 
         InitializeCriticalSectionAndSpinCount(&locks[i].lock, 16000000);
         locks[i].region = i;
@@ -46,20 +45,29 @@ PAGE_TABLE* create_pagetable() {
 }
 
 
-PPTE pte_from_va(PULONG64 va) { 
+PPTE pte_from_va(PULONG64 va) {
 
-    // find how many spaces are between our va and the first va in the allocated chunk
+    /**
+     * What we're doing here:
+     * 1) find how many spaces are between our va and 
+     *    the first va in the allocated chunk
+     * 2) divide this space by the page size to know how 
+     *    many pages the space is (each page has a pte)
+     * 3) starting from the first pte, the difference 
+     *    tells you how far from this your pte is
+     */ 
+
     ULONG_PTR difference = (ULONG_PTR) va - (ULONG_PTR) g_vmem_base;
     
-    // divide this space by the page size to know how many pages the space is (each page has a pte)
     difference /= PAGE_SIZE;
 
-    // starting from the first pte, the difference tells you how far from this your pte is
     return g_pte_base + difference;
 }
 
-
-// TS: make va's PVOID so that compiler doesn't do anything do it
+/**
+ * TS:
+ * Make va's PVOID so that compiler doesn't do anything do it
+ */
 PULONG_PTR va_from_pte(PTE* pte) { 
 
     ULONG_PTR difference = (ULONG_PTR) (pte - g_pte_base);

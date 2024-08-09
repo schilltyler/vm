@@ -5,8 +5,13 @@
 
 
 #pragma comment(lib, "advapi32.lib")
+#pragma comment(lib, "onecore.lib")
 
-// TS: probably should return int so that we can check and make sure each initialization works
+/**
+ * TS:
+ * Could return int for each init function
+ * to make sure that each one successfully executes
+ */
 
 // Global lists
 listhead_t g_free_list;
@@ -27,6 +32,7 @@ page_t* g_pfn_base;
 ULONG_PTR g_virtual_address_size;
 ULONG_PTR g_virtual_address_size_in_unsigned_chunks;
 PULONG_PTR g_vmem_base;
+MEM_EXTENDED_PARAMETER g_vmem_parameter;
 
 // Global disk-write variables
 ULONG_PTR g_pagefile_blocks;
@@ -37,12 +43,14 @@ LPVOID g_mod_page_va;
 // Global faulting variables
 int g_num_fault_threads;
 int g_va_iterate_type;
-int g_num_faults;
 
 // Global Events/Threads
 HANDLE g_trim_event;
 HANDLE g_disk_write_event;
 HANDLE g_fault_event;
+HANDLE g_kill_trim_event;
+HANDLE g_trim_finished_event;
+HANDLE* g_trim_handles;
 HANDLE* g_threads;
 VOID fault_thread();
 
@@ -51,7 +59,18 @@ CRITICAL_SECTION g_mod_lock;
 CRITICAL_SECTION g_standby_lock;
 CRITICAL_SECTION g_free_lock;
 
+// Thread stats
+ULONG64 g_num_faults;
 
+// Debugging Variables
+#if CIRCULAR_LOG
+PAGE_LOG g_page_log[LOG_SIZE];
+volatile ULONG64 log_idx;
+#endif
+
+
+// Initialization globals
+HANDLE physical_page_handle;
 
 // Windows stuff
 BOOL GetPrivilege (VOID)
@@ -115,6 +134,28 @@ BOOL GetPrivilege (VOID)
     return TRUE;
 }
 
+HANDLE
+CreateSharedMemorySection (VOID)
+{
+    HANDLE section;
+    //
+    // Create an AWE section.  Later we deposit pages into it and/or
+    // return them.
+    //
+    g_vmem_parameter.Type = MemSectionExtendedParameterUserPhysicalFlags;
+    g_vmem_parameter.ULong = 0;
+    section = CreateFileMapping2 (INVALID_HANDLE_VALUE,
+                                  NULL,
+                                  SECTION_MAP_READ | SECTION_MAP_WRITE,
+                                  PAGE_READWRITE,
+                                  SEC_RESERVE,
+                                  0,
+                                  NULL,
+                                  &g_vmem_parameter,
+                                  1);
+    return section;
+}
+
 VOID initialize_events(VOID) 
 {
     g_trim_event = CreateEvent(NULL, FALSE, FALSE, NULL);
@@ -124,6 +165,13 @@ VOID initialize_events(VOID)
     InitializeCriticalSectionAndSpinCount(&g_mod_lock, 16000000);
     InitializeCriticalSectionAndSpinCount(&g_standby_lock, 16000000);
     InitializeCriticalSectionAndSpinCount(&g_free_lock, 16000000);
+
+    g_kill_trim_event = CreateEvent(NULL, FALSE, FALSE, NULL);
+    g_trim_finished_event = CreateEvent(NULL, FALSE, FALSE, NULL);
+
+    g_trim_handles = malloc(sizeof(HANDLE*) * 2);
+    g_trim_handles[0] = g_trim_event;
+    g_trim_handles[1] = g_kill_trim_event;
 }
 
 VOID initialize_threads(VOID)
@@ -141,16 +189,21 @@ VOID initialize_threads(VOID)
 
 VOID initialize_pages(VOID)
 {
-    HANDLE physical_page_handle;
     ULONG_PTR number_of_physical_pages;
 
+    #if SUPPORT_MULTIPLE_VA_TO_SAME_PAGE
+    physical_page_handle = CreateSharedMemorySection();
+
+    if (physical_page_handle == NULL) {
+        printf ("CreateFileMapping2 failed, error %#x\n", GetLastError ());
+        return;
+    }
+    #else
     physical_page_handle = GetCurrentProcess ();
+    #endif
 
-    //physical_page_count = NUMBER_OF_PHYSICAL_PAGES;
+    g_physical_page_count = NUMBER_OF_PHYSICAL_PAGES;
 
-    number_of_physical_pages = g_physical_page_count;
-
-    // make array for physical page numbers
     g_physical_page_numbers = malloc (g_physical_page_count * sizeof (ULONG_PTR));
 
     if (g_physical_page_numbers == NULL) {
@@ -160,7 +213,6 @@ VOID initialize_pages(VOID)
 
     BOOL allocated;
 
-    // get the physical pages
     allocated = AllocateUserPhysicalPages (physical_page_handle,
                                            &g_physical_page_count,
                                            g_physical_page_numbers);
@@ -170,33 +222,52 @@ VOID initialize_pages(VOID)
         return;
     }
 
-    // could not get all of the physical pages asked for
-    if (g_physical_page_count != number_of_physical_pages) {
+    if (g_physical_page_count != NUMBER_OF_PHYSICAL_PAGES) {
 
-        printf ("full_virtual_memory_test : allocated only %llu pages out of %llu pages requested\n",
+        printf ("full_virtual_memory_test : allocated only %llu pages out of %u pages requested\n",
                 g_physical_page_count,
-                number_of_physical_pages);
+                NUMBER_OF_PHYSICAL_PAGES);
     }
 
-    g_pagefile_blocks = ((g_virtual_address_size / PAGE_SIZE) - g_physical_page_count + 1);
+    g_pagefile_blocks = ((VIRTUAL_ADDRESS_SIZE / PAGE_SIZE) - g_physical_page_count + 1);
 }
 
 VOID initialize_user_va_space(VOID) 
 {
-    // reserve user address space region
-    //virtual_address_size = 64 * physical_page_count * PAGE_SIZE;
+    g_virtual_address_size = VIRTUAL_ADDRESS_SIZE;
 
-    // Round down to a PAGE_SIZE boundary
+    /**
+     * TS:
+     * Explanation for this:
+     * Round down to a PAGE_SIZE boundary
+     */
     g_virtual_address_size &= ~PAGE_SIZE;
 
     g_virtual_address_size_in_unsigned_chunks =
                         g_virtual_address_size / sizeof (ULONG_PTR);
 
-    // allocate pages virtually
+    #if SUPPORT_MULTIPLE_VA_TO_SAME_PAGE
+
+    /**
+     * Allocate a MEM_PHYSICAL region that is "connected" to the AWE section
+     * created above.
+     */
+    g_vmem_parameter.Type = MemExtendedParameterUserPhysicalHandle;
+    g_vmem_parameter.Handle = physical_page_handle;
+
+    g_vmem_base = VirtualAlloc2 (NULL,
+                       NULL,
+                       g_virtual_address_size,
+                       MEM_RESERVE | MEM_PHYSICAL,
+                       PAGE_READWRITE,
+                       &g_vmem_parameter,
+                       1);
+    #else
     g_vmem_base = VirtualAlloc (NULL,
                       g_virtual_address_size,
                       MEM_RESERVE | MEM_PHYSICAL,
                       PAGE_READWRITE);
+    #endif
 
     if (g_vmem_base == NULL) {
         printf ("full_virtual_memory_test : could not reserve memory\n");
@@ -206,8 +277,7 @@ VOID initialize_user_va_space(VOID)
 
 VOID initialize_pte_metadata(VOID) 
 {
-    // initialize PTE's we will use
-    g_num_ptes = g_virtual_address_size / PAGE_SIZE;
+    g_num_ptes = VIRTUAL_ADDRESS_SIZE / PAGE_SIZE;
 
     ULONG_PTR num_pte_bytes = g_num_ptes * sizeof(PTE);
 
@@ -242,7 +312,17 @@ VOID initialize_pfn_metadata(VOID)
 
 VOID initialize_mod_va_space(VOID) 
 {
+    #if SUPPORT_MULTIPLE_VA_TO_SAME_PAGE
+    g_mod_page_va = VirtualAlloc2 (NULL,
+                       NULL,
+                       PAGE_SIZE,
+                       MEM_RESERVE | MEM_PHYSICAL,
+                       PAGE_READWRITE,
+                       &g_vmem_parameter,
+                       1);
+    #else
     g_mod_page_va = VirtualAlloc(NULL, PAGE_SIZE, MEM_RESERVE | MEM_PHYSICAL, PAGE_READWRITE);
+    #endif
 
     if (g_mod_page_va == NULL) {
     
@@ -281,15 +361,12 @@ VOID initialize_mod_va_space(VOID)
 
 VOID initialize_lists(VOID) 
 {
-    // create standby list, not populated yet though
     g_standby_list.flink = &g_standby_list;
     g_standby_list.blink = &g_standby_list;
 
-    // create modified list, not populated yet though
     g_modified_list.flink = &g_modified_list;
     g_modified_list.blink = &g_modified_list;
 
-    // create free list, then populate it with physical frame numbers
     g_free_list.flink = &g_free_list;
     g_free_list.blink = &g_free_list;
 
@@ -312,7 +389,11 @@ VOID initialize_system(VOID)
     if (privilege == FALSE) {
         printf ("full_virtual_memory_test : could not get privilege\n");
         return;
-    }    
+    }
+
+    #if CIRCULAR_LOG
+    log_idx = 0;
+    #endif    
 
     initialize_pages();
 
@@ -330,39 +411,3 @@ VOID initialize_system(VOID)
 
     initialize_threads();
 }
-
-#if 0
-void DiskRead() {
-
-    memcpy();
-
-    for (int i = 0; i < 1000000; i ++) {
-    
-        continue;
-    
-    }
-
-}
-
-void DiskWrite() {
-
-    memcpy();
-
-    for (int i = 0; i < 1000000; i ++) {
-    
-        // TS: how to spin?
-    
-    }
-
-}
-
-// TS: not sure how to do critical section initializers
-
-void make_critical_section() {
-
-    SetCriticalSectionSpinCount();
-
-}
-
-#endif
-

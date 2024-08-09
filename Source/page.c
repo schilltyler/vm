@@ -3,17 +3,24 @@
 #include "../Include/page.h"
 #include "../Include/initialize.h"
 #include "../Include/debug.h"
+#include <assert.h>
 
-// May need this later
-//#define byte_offset(va) ((ULONG_PTR) va & ~(PAGE_SIZE - 1))
+/**
+ * TS:
+ * Explanation for this? (Told myself I might need this later)
+ * #define byte_offset(va) ((ULONG_PTR) va & ~(PAGE_SIZE - 1))
+ */
 
 
 page_t* page_create(page_t* pfn_base, ULONG_PTR page_num) {
 
     page_t* new_page = pfn_base + page_num;
     page_t* base_page = VirtualAlloc(new_page, sizeof(page_t), MEM_COMMIT, PAGE_READWRITE);
-    // fix this when fixing structure_padding, commit both halves (base_page and the next page)
 
+    /**
+     * TS:
+     * Explanation for this?
+     */
     C_ASSERT((PAGE_SIZE % sizeof(page_t)) == 0);
     
     if (new_page == NULL) {
@@ -21,16 +28,18 @@ page_t* page_create(page_t* pfn_base, ULONG_PTR page_num) {
         return NULL;
     }
 
-    // set pte
     new_page->pte = NULL;
 
     return new_page;
 }
 
-// insert at head
+
 void list_insert(listhead_t* listhead, page_t* new_page) {
 
-    // set links
+    /**
+     * Inserts at the head
+     */
+
     new_page->flink = (page_t*) listhead->flink;
     listhead->flink->blink = (listhead_t*) new_page;
     listhead->flink = (listhead_t*) new_page;
@@ -40,7 +49,10 @@ void list_insert(listhead_t* listhead, page_t* new_page) {
     CaptureStackBackTrace(0, 8, new_page->backtrace, NULL);
     #endif
 
-    // increment list size
+    #if CIRCULAR_LOG
+    log_page(new_page);
+    #endif
+
     listhead->list_size += 1;
 
     return;
@@ -48,7 +60,6 @@ void list_insert(listhead_t* listhead, page_t* new_page) {
 
 void list_insert_tail(listhead_t* listhead, page_t* new_page) {
 
-    // set links
     new_page->blink = (page_t*) listhead->blink;
     new_page->flink = (page_t*) listhead;
     listhead->blink->flink = (listhead_t*) new_page;
@@ -59,12 +70,10 @@ void list_insert_tail(listhead_t* listhead, page_t* new_page) {
 
 page_t* list_pop(listhead_t* listhead) {
 
-    // check if list is empty
     if (listhead->flink == listhead) {
         return NULL;
     }
 
-    // adjust links
     page_t* popped_page = (page_t*) listhead->flink;
     listhead->flink = listhead->flink->flink;
     listhead->flink->blink = listhead;
@@ -76,7 +85,10 @@ page_t* list_pop(listhead_t* listhead) {
     CaptureStackBackTrace(0, 8, popped_page->backtrace, NULL);
     #endif
 
-    // decrement list size
+    #if CIRCULAR_LOG
+    log_page(popped_page);
+    #endif
+
     listhead->list_size -= 1;
 
     return popped_page;
@@ -90,12 +102,33 @@ void list_unlink(listhead_t* listhead, ULONG64 pfn) {
 
     page_t* page = page_from_pfn(pfn, g_pfn_base);
 
+    /**
+     * TS:
+     * Debugger is not working currently so this will stop us
+     * at the error and then hang so that we can attach it to
+     * the debugger (which does work)
+     */
+    if (page->flink == NULL && page->blink == NULL) {
+
+        printf("Page flink and blink are NULL\n");
+
+        while(TRUE) {
+
+
+        }
+
+    }
+
     // adjust links
     page->flink->blink = page->blink;
     page->blink->flink = page->flink;
 
     #if DEBUG_PAGE
     CaptureStackBackTrace(0, 8, page->backtrace, NULL);
+    #endif
+
+    #if CIRCULAR_LOG
+    log_page(page);
     #endif
 
     page->flink = NULL;
