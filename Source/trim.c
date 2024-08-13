@@ -3,6 +3,7 @@
 #include "../Include/page.h"
 #include "../Include/pagetable.h"
 #include "../Include/initialize.h"
+#include <assert.h>
 
 HANDLE modify_event;
 
@@ -68,12 +69,23 @@ void trim_thread(void* context) {
                         new_contents.transition.frame_number = trim_pte->memory.frame_number;
                         new_contents.transition.rescuable = 1;
                         
-                        *trim_pte = new_contents;
+                        write_pte(trim_pte, new_contents);
 
                         EnterCriticalSection(&g_mod_lock);
 
-                        curr_page->list_type = MODIFIED;
-                        list_insert(&g_modified_list, curr_page);
+                        if (curr_page->write_in_progress == TRUE) {
+
+                            assert(curr_page->was_rescued == TRUE);
+
+                            curr_page->list_type = MODIFIED;
+
+                        }
+                        else {
+
+                            curr_page->list_type = MODIFIED;
+                            list_insert(&g_modified_list, curr_page);
+
+                        }
 
                         LeaveCriticalSection(&g_mod_lock);
 
@@ -99,10 +111,6 @@ void trim_thread(void* context) {
     }
 }
 
-
-#define DISK_BLOCK_FREE 0
-#define DISK_BLOCK_IN_USE 1
-
 void disk_write_thread(void* context) {
 
     context = context;
@@ -117,8 +125,13 @@ void disk_write_thread(void* context) {
          */
         EnterCriticalSection(&g_mod_lock);
 
-        for (int i = 0; i < g_modified_list.list_size; i ++) {
+        while (g_modified_list.list_size != 0) {
             
+            /**
+             * TS:
+             * list pop from tail here so we are not writing the newest pages
+             * to disk
+             */
             page_t* curr_page = list_pop(&g_modified_list);
 
             if (curr_page == NULL) {
@@ -136,6 +149,7 @@ void disk_write_thread(void* context) {
                 if (g_pagefile_state[j] == DISK_BLOCK_FREE) {
 
                     g_pagefile_state[j] = DISK_BLOCK_IN_USE;
+                    g_pagefile_addresses[j].virtual_address = va_from_pte(curr_page->pte);
 
                     break;
 
@@ -194,9 +208,22 @@ void disk_write_thread(void* context) {
                  * Check was modified bit
                  * This will tell us if the user wrote to the page when
                  * they rescued, or if they just read it
+                 * If they just read it, then we don't need to throw away
+                 * what we wrote to disk because the contents will not have
+                 * changed.
+                 * However, if they did write to it then we would throw away
+                 * the disk spot and write the edited version of the page
+                 * once we come across it off the modified list again
                  */
                 g_pagefile_state[j] = DISK_BLOCK_FREE;
+                g_pagefile_addresses[j].virtual_address = NULL;
                 curr_page->was_rescued = FALSE;
+
+                if (curr_page->list_type == MODIFIED) {
+
+                    list_insert(&g_modified_list, curr_page);
+
+                }
 
             }
             else {
@@ -211,8 +238,15 @@ void disk_write_thread(void* context) {
                  * the tail and it is popping from the head
                  * Probably just better to acquire the lock to be safe
                  * for now
+                 * Now the free list will act as a second standby list
+                 * These pages will act exactly like any other standby page,
+                 * except that we will not rescue them, which is fine because
+                 * we will only have a small supply of these in order to
+                 * take some pressure of the standby list
                  */
                 if (g_free_list.list_size < g_physical_page_count * 0.1) {
+
+                    curr_page->disk_address = j;
 
                     EnterCriticalSection(&g_free_lock);
                     list_insert_tail(g_free_list, curr_page);
@@ -223,21 +257,32 @@ void disk_write_thread(void* context) {
 
                 }
                 else {
-                
-                    // place current standby code
-                
+
+                    curr_page->disk_address = j;
+
+                    EnterCriticalSection(&g_standby_lock);
+
+                    list_insert(&g_standby_list, curr_page);
+                    curr_page->list_type = STANDBY;
+
+                    LeaveCriticalSection(&g_standby_lock);
+
+                    SetEvent(g_fault_event);
+
                 }
-                #endif
+                #else
 
                 curr_page->disk_address = j;
 
                 EnterCriticalSection(&g_standby_lock);
+
                 list_insert(&g_standby_list, curr_page);
                 curr_page->list_type = STANDBY;
 
                 LeaveCriticalSection(&g_standby_lock);
 
                 SetEvent(g_fault_event);
+                #endif
 
             }
 

@@ -33,12 +33,22 @@ page_t* page_create(page_t* pfn_base, ULONG_PTR page_num) {
     return new_page;
 }
 
-
 void list_insert(listhead_t* listhead, page_t* new_page) {
 
     /**
      * Inserts at the head
      */
+
+    if (new_page->write_in_progress == 1) {
+
+        printf("Page still marked as rescued or write in progress\n");
+
+        while(TRUE) {
+
+
+        }
+
+    }
 
     new_page->flink = (page_t*) listhead->flink;
     listhead->flink->blink = (listhead_t*) new_page;
@@ -47,6 +57,7 @@ void list_insert(listhead_t* listhead, page_t* new_page) {
 
     #if DEBUG_PAGE
     CaptureStackBackTrace(0, 8, new_page->backtrace, NULL);
+    copy_page_fields(new_page);
     #endif
 
     #if CIRCULAR_LOG
@@ -78,12 +89,13 @@ page_t* list_pop(listhead_t* listhead) {
     listhead->flink = listhead->flink->flink;
     listhead->flink->blink = listhead;
 
-    popped_page->flink = NULL;
-    popped_page->blink = NULL;
-
     #if DEBUG_PAGE
     CaptureStackBackTrace(0, 8, popped_page->backtrace, NULL);
+    copy_page_fields(popped_page);
     #endif
+
+    popped_page->flink = NULL;
+    popped_page->blink = NULL;
 
     #if CIRCULAR_LOG
     log_page(popped_page);
@@ -125,6 +137,7 @@ void list_unlink(listhead_t* listhead, ULONG64 pfn) {
 
     #if DEBUG_PAGE
     CaptureStackBackTrace(0, 8, page->backtrace, NULL);
+    copy_page_fields(page);
     #endif
 
     #if CIRCULAR_LOG

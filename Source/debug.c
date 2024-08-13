@@ -21,3 +21,19 @@ void log_page(page_t* page) {
 }
 
 #endif
+
+#if DEBUG_PAGE
+
+void copy_page_fields(page_t* page) {
+
+    page->page_debug.flink = page->flink;
+    page->page_debug.blink = page->blink;
+    page->page_debug.disk_address = page->disk_address;
+    page->page_debug.list_type = page->list_type;
+    page->page_debug.pte = page->pte;
+    page->page_debug.was_rescued = page->was_rescued;
+    page->page_debug.write_in_progress = page->write_in_progress;
+    
+}
+
+#endif

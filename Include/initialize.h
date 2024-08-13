@@ -15,16 +15,18 @@
 #define LOG_SIZE 512
 #define SUCCESS 1
 #define ERROR 0
-#define FREE 0
 #define MODIFIED 0
 #define STANDBY 1
 #define ACTIVE 2
+#define FREE 3
 #define ACCESS_AMOUNT MB(10)
 #define VIRTUAL_ADDRESS_SIZE MB(16)
 #define NUMBER_OF_PHYSICAL_PAGES ((VIRTUAL_ADDRESS_SIZE / PAGE_SIZE) / 2)
 #define VA_ITERATE_TYPE 1
 #define NUM_PTE_REGIONS 128
 #define NUM_PTES_PER_REGION ((VIRTUAL_ADDRESS_SIZE / PAGE_SIZE) / NUM_PTE_REGIONS)
+#define DISK_BLOCK_FREE 0
+#define DISK_BLOCK_IN_USE 1
 
 
 // Global lists
@@ -41,6 +43,7 @@ extern PAGE_TABLE* g_pagetable;
 extern ULONG_PTR g_physical_page_count;
 extern PULONG_PTR g_physical_page_numbers;
 extern page_t* g_pfn_base;
+extern ULONG64 g_low_pfn;
 
 // Global VA variables
 extern ULONG_PTR g_virtual_address_size;
@@ -52,6 +55,7 @@ extern MEM_EXTENDED_PARAMETER g_vmem_parameter;
 extern ULONG_PTR g_pagefile_blocks;
 extern UCHAR* g_pagefile_contents;
 extern UCHAR* g_pagefile_state;
+extern PAGEFILE_DEBUG* g_pagefile_addresses;
 extern LPVOID g_mod_page_va;
 
 // Global faulting variables

@@ -70,10 +70,16 @@ int rescue_page(PPTE pte, PULONG_PTR virtual_address, PTE_LOCK* pte_lock) {
     boolean got_page;
     ULONG64 pfn;
     ULONG64 disk_addr;
+    PTE old_contents;
+    PTE new_contents;
+    boolean got_standby;
 
     got_page = FALSE;
+    got_standby = FALSE;
 
-    pfn = pte->transition.frame_number;
+    old_contents = *pte;
+
+    pfn = old_contents.transition.frame_number;
 
     free_page = page_from_pfn(pfn, g_pfn_base);
 
@@ -103,13 +109,20 @@ int rescue_page(PPTE pte, PULONG_PTR virtual_address, PTE_LOCK* pte_lock) {
 
             got_page = TRUE;
 
+        
+
+            /**
+             * Need to make sure mod writer can see this so that we don't reinsert
+             * on the modified list when it's active
+             */
+            free_page->list_type = ACTIVE;
         }
 
         LeaveCriticalSection(&g_mod_lock);
 
     }
 
-    if (free_page->list_type == STANDBY) {
+    if (got_page == FALSE) {
 
         EnterCriticalSection(&g_standby_lock);
 
@@ -124,6 +137,19 @@ int rescue_page(PPTE pte, PULONG_PTR virtual_address, PTE_LOCK* pte_lock) {
             list_unlink(&g_standby_list, pfn);
 
             got_page = TRUE;
+            got_standby = TRUE;
+
+            /**
+             * TS:
+             * Explain this better
+             * Consistency from above
+             */
+            free_page->list_type = ACTIVE;
+
+        }
+        else {
+
+            DebugBreak();
 
         }
         
@@ -170,21 +196,28 @@ int rescue_page(PPTE pte, PULONG_PTR virtual_address, PTE_LOCK* pte_lock) {
         return ERROR;
 
     }
-            
-    pte->memory.valid = 1;
-    
-    pte->transition.rescuable = 0;
-    free_page->list_type = ACTIVE;
+
+    new_contents.entire_format = 0;
+
+    new_contents.memory.valid = 1;
+    new_contents.memory.frame_number = old_contents.transition.frame_number;
+
+    write_pte(pte, new_contents);
 
     disk_addr = free_page->disk_address;
 
     LeaveCriticalSection(&pte_lock->lock); 
 
-    EnterCriticalSection(&g_mod_lock);
-    g_pagefile_state[disk_addr] = FREE;
-    LeaveCriticalSection(&g_mod_lock);
+    if (got_standby == TRUE) {
 
-    //SetEvent(disk_write_event);
+        EnterCriticalSection(&g_mod_lock);
+        g_pagefile_state[disk_addr] = DISK_BLOCK_FREE;
+        g_pagefile_addresses[disk_addr].virtual_address = NULL;
+        LeaveCriticalSection(&g_mod_lock);
+
+        SetEvent(g_disk_write_event);
+
+    }
 
     return SUCCESS;
 
@@ -194,6 +227,7 @@ int map_new_va(PPTE pte, PULONG_PTR virtual_address, PTE_LOCK* pte_lock) {
 
     page_t* free_page;
     ULONG64 pfn;
+    PTE new_contents;
 
     free_page = get_free_or_standby(pte_lock);
 
@@ -221,8 +255,12 @@ int map_new_va(PPTE pte, PULONG_PTR virtual_address, PTE_LOCK* pte_lock) {
     /**
      * Enter back into pte lock
      */
-    pte->memory.valid = 1;
-    pte->memory.frame_number = pfn;
+    new_contents.entire_format = 0;
+
+    new_contents.memory.valid = 1;
+    new_contents.memory.frame_number = pfn;
+    
+    write_pte(pte, new_contents);
 
     /**
      * Need this for when I trim page from something like standby and 
@@ -233,10 +271,14 @@ int map_new_va(PPTE pte, PULONG_PTR virtual_address, PTE_LOCK* pte_lock) {
     LeaveCriticalSection(&pte_lock->lock);
 
     
-    if (g_free_list.list_size + g_standby_list.list_size < g_physical_page_count / 4) {
-        SetEvent(g_trim_event);
+    if (free_page->disk_address != 0) {
+
+        EnterCriticalSection(&g_mod_lock);
+        g_pagefile_state[free_page->disk_address] = DISK_BLOCK_FREE;
+        g_pagefile_addresses[free_page->disk_address].virtual_address = NULL;
+        LeaveCriticalSection(&g_mod_lock);
+
     }
-    
 
     return SUCCESS;
 }
@@ -325,7 +367,7 @@ int read_disk(PPTE pte, PULONG_PTR virtual_address, PTE_LOCK* pte_lock, LPVOID m
     new_contents.memory.valid = 1;
     new_contents.memory.frame_number = pfn;
     
-    *pte = new_contents;
+    write_pte(pte, new_contents);
 
     free_page->pte = pte;
 
@@ -349,15 +391,15 @@ int read_disk(PPTE pte, PULONG_PTR virtual_address, PTE_LOCK* pte_lock, LPVOID m
     LeaveCriticalSection(&pte_lock->lock);
 
     EnterCriticalSection(&g_mod_lock);
-    g_pagefile_state[disk_addr] = FREE;
+    g_pagefile_state[disk_addr] = DISK_BLOCK_FREE;
+    g_pagefile_addresses[disk_addr].virtual_address = NULL;
     LeaveCriticalSection(&g_mod_lock);
 
-    //SetEvent(disk_write_event);
+    SetEvent(g_disk_write_event);
 
     return SUCCESS;
 
 }
-
 
 page_t* get_free_or_standby(PTE_LOCK* pte_lock) {
 
@@ -372,6 +414,10 @@ page_t* get_free_or_standby(PTE_LOCK* pte_lock) {
     page_t* free_page;
     PULONG_PTR old_va;
     PTE_LOCK* old_pte_lock;
+    PTE new_contents;
+    PTE* old_pte;
+
+    new_contents.entire_format = 0;
 
     EnterCriticalSection(&g_free_lock);
     free_page = list_pop(&g_free_list);
@@ -411,13 +457,15 @@ page_t* get_free_or_standby(PTE_LOCK* pte_lock) {
          * Actually no, at the bottom of this function we should
          */
         
-        old_va = va_from_pte(free_page->pte);
+        old_pte = free_page->pte;
+        old_va = va_from_pte(old_pte);
         old_pte_lock = get_pte_lock(old_va);
 
         if (old_pte_lock->region == pte_lock->region) {
+            
+            new_contents.disk.disk_address = free_page->disk_address;
 
-            free_page->pte->disk.disk_address = free_page->disk_address;
-            free_page->pte->disk.always_zero2 = 0;
+            write_pte(old_pte, new_contents);
 
         }
 
@@ -434,9 +482,9 @@ page_t* get_free_or_standby(PTE_LOCK* pte_lock) {
             
             }
 
-            free_page->pte->disk.disk_address = free_page->disk_address;
-            free_page->pte->disk.always_zero2 = 0;
+            new_contents.disk.disk_address = free_page->disk_address;
 
+            write_pte(old_pte, new_contents);
         
             LeaveCriticalSection(&old_pte_lock->lock);
 

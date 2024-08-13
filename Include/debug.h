@@ -24,4 +24,10 @@ typedef struct {
 } PAGE_LOG;
 #endif
 
+typedef struct {
+
+    PULONG_PTR virtual_address;
+
+} PAGEFILE_DEBUG;
+
 #endif

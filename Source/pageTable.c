@@ -100,3 +100,33 @@ PTE_LOCK* get_pte_lock(PULONG_PTR virtual_address) {
     return pte_lock;
 
 }
+
+void write_pte(PTE* pte, PTE new_contents) {
+
+    if (new_contents.memory.valid == 1 &&
+        new_contents.memory.frame_number < g_low_pfn) {
+        
+        printf("Memory frame number below the low pfn\n");
+
+        while(TRUE) {
+
+        }
+
+    }
+
+    if (new_contents.memory.valid == 0 && 
+        new_contents.transition.rescuable && 
+        new_contents.transition.frame_number < g_low_pfn) {
+
+        printf("Transition frame number below the low pfn\n");
+
+        while(TRUE) {
+
+        }
+
+    }
+
+
+    *pte = new_contents;
+
+}

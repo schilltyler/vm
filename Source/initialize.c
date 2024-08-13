@@ -27,6 +27,7 @@ PAGE_TABLE* g_pagetable;
 ULONG_PTR g_physical_page_count;
 PULONG_PTR g_physical_page_numbers;
 page_t* g_pfn_base;
+ULONG64 g_low_pfn;
 
 // Global VA variables
 ULONG_PTR g_virtual_address_size;
@@ -38,6 +39,7 @@ MEM_EXTENDED_PARAMETER g_vmem_parameter;
 ULONG_PTR g_pagefile_blocks;
 UCHAR* g_pagefile_contents;
 UCHAR* g_pagefile_state;
+PAGEFILE_DEBUG* g_pagefile_addresses;
 LPVOID g_mod_page_va;
 
 // Global faulting variables
@@ -296,9 +298,17 @@ VOID initialize_pte_metadata(VOID)
 VOID initialize_pfn_metadata(VOID)
 {
     ULONG64 high_pfn = 0x0;
+    
+    g_low_pfn = MAXULONG64;
+
     for (int i = 0; i < g_physical_page_count; i ++) {
+
         if (g_physical_page_numbers[i] > high_pfn) {
             high_pfn = g_physical_page_numbers[i];
+        }
+
+        if (g_physical_page_numbers[i] < g_low_pfn) {
+            g_low_pfn = g_physical_page_numbers[i];
         }
     }
 
@@ -353,7 +363,17 @@ VOID initialize_mod_va_space(VOID)
 
     for (int i = 0; i < g_pagefile_blocks; i ++) {
 
-        g_pagefile_state[i] = FREE;
+        g_pagefile_state[i] = DISK_BLOCK_FREE;
+
+    }
+
+    g_pagefile_addresses = malloc(g_pagefile_blocks * sizeof(PULONG_PTR));
+
+    if (g_pagefile_addresses == NULL) {
+
+        printf("Could not malloc pagefile_addresses space\n");
+
+        return;
 
     }
 
