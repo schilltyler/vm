@@ -223,8 +223,12 @@ void disk_write_thread(void* context) {
 
             }
             else {
+
                 
                 #if 0
+
+
+
                 /**
                  * Replenish the free list to take contention off of
                  * standby
@@ -266,6 +270,7 @@ void disk_write_thread(void* context) {
                     SetEvent(g_fault_event);
 
                 }
+
                 #else
                 curr_page->disk_address = j;
 
@@ -278,6 +283,8 @@ void disk_write_thread(void* context) {
 
                 SetEvent(g_fault_event);
                 #endif
+
+
 
             }
 
