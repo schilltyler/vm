@@ -17,6 +17,7 @@
 listhead_t g_free_list;
 listhead_t g_standby_list;
 listhead_t g_modified_list;
+listhead_t g_zero_list;
 
 // Global pte variables
 ULONG_PTR g_num_ptes;
@@ -60,6 +61,7 @@ VOID fault_thread();
 CRITICAL_SECTION g_mod_lock;
 CRITICAL_SECTION g_standby_lock;
 CRITICAL_SECTION g_free_lock;
+CRITICAL_SECTION g_zero_lock;
 
 // Thread stats
 ULONG64 g_num_faults;
@@ -167,6 +169,7 @@ VOID initialize_events(VOID)
     InitializeCriticalSectionAndSpinCount(&g_mod_lock, 16000000);
     InitializeCriticalSectionAndSpinCount(&g_standby_lock, 16000000);
     InitializeCriticalSectionAndSpinCount(&g_free_lock, 16000000);
+    InitializeCriticalSectionAndSpinCount(&g_zero_lock, 16000000);
 
     g_kill_trim_event = CreateEvent(NULL, FALSE, FALSE, NULL);
     g_trim_finished_event = CreateEvent(NULL, FALSE, FALSE, NULL);
@@ -390,10 +393,14 @@ VOID initialize_lists(VOID)
     g_free_list.flink = &g_free_list;
     g_free_list.blink = &g_free_list;
 
+    g_zero_list.flink = &g_zero_list;
+    g_zero_list.blink = &g_zero_list;
+
     for (int i = 0; i < g_physical_page_count; i ++) {
 
         page_t* new_page = page_create(g_pfn_base, g_physical_page_numbers[i]);
-        list_insert(&g_free_list, new_page);
+        list_insert(&g_zero_list, new_page);
+        new_page->list_type = ZERO;
 
     }
 

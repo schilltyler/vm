@@ -19,6 +19,9 @@
 #define STANDBY 1
 #define ACTIVE 2
 #define FREE 3
+#define ZERO 4
+#define POP_FREE 1
+#define POP_ZERO 0
 #define ACCESS_AMOUNT MB(10)
 #define VIRTUAL_ADDRESS_SIZE MB(16)
 #define NUMBER_OF_PHYSICAL_PAGES ((VIRTUAL_ADDRESS_SIZE / PAGE_SIZE) / 2)
@@ -30,9 +33,24 @@
 
 
 // Global lists
+#if 0
+/**
+ * Use this so that we can dump all lists
+ * with just one command in the debugger
+ */
+typedef struct {
+
+    listhead_t free_list;
+    listhead_t standby_list;
+    listhead_t modified_list;
+    listhead_t zero_list;
+
+} glists;
+#endif
 extern listhead_t g_free_list;
 extern listhead_t g_standby_list;
 extern listhead_t g_modified_list;
+extern listhead_t g_zero_list;
 
 // Global pte variables
 extern ULONG_PTR g_num_ptes;
@@ -76,6 +94,7 @@ extern VOID fault_thread();
 extern CRITICAL_SECTION g_mod_lock;
 extern CRITICAL_SECTION g_standby_lock;
 extern CRITICAL_SECTION g_free_lock;
+extern CRITICAL_SECTION g_zero_lock;
 
 // Global Functions
 extern VOID initialize_system(VOID);

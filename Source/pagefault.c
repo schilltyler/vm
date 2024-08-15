@@ -228,8 +228,17 @@ int map_new_va(PPTE pte, PULONG_PTR virtual_address, PTE_LOCK* pte_lock) {
     page_t* free_page;
     ULONG64 pfn;
     PTE new_contents;
+    int pop_free_or_zero;
 
-    free_page = get_free_or_standby(pte_lock);
+    /**
+     * TS:
+     * Grab from zero list or standby
+     * Grabbing from the free list will give us
+     * leftover data from the last user
+     */
+    pop_free_or_zero = POP_ZERO;
+
+    free_page = get_free_zero_standby(pte_lock, pop_free_or_zero);
 
     if (free_page == NULL) {
 
@@ -290,12 +299,15 @@ int read_disk(PPTE pte, PULONG_PTR virtual_address, PTE_LOCK* pte_lock, LPVOID m
     void* src;
     PTE new_contents;
     ULONG64 disk_addr;
+    int pop_free_or_zero;
 
     #if 0
     PTE* old_pte = pte;
     #endif
 
-    free_page = get_free_or_standby(pte_lock);
+    pop_free_or_zero = POP_FREE;
+
+    free_page = get_free_zero_standby(pte_lock, pop_free_or_zero);
 
     #if 0
     EnterCriticalSection(pte_lock->lock);
@@ -401,7 +413,7 @@ int read_disk(PPTE pte, PULONG_PTR virtual_address, PTE_LOCK* pte_lock, LPVOID m
 
 }
 
-page_t* get_free_or_standby(PTE_LOCK* pte_lock) {
+page_t* get_free_zero_standby(PTE_LOCK* pte_lock, int pop_free_or_zero) {
 
     /**
      * TS:
@@ -419,9 +431,20 @@ page_t* get_free_or_standby(PTE_LOCK* pte_lock) {
 
     new_contents.entire_format = 0;
 
-    EnterCriticalSection(&g_free_lock);
-    free_page = list_pop(&g_free_list);
-    LeaveCriticalSection(&g_free_lock);
+    if (pop_free_or_zero == POP_ZERO) {
+
+        EnterCriticalSection(&g_zero_lock);
+        free_page = list_pop(&g_zero_list);
+        LeaveCriticalSection(&g_zero_lock);
+
+    }
+    else {
+
+        EnterCriticalSection(&g_free_lock);
+        free_page = list_pop(&g_free_list);
+        LeaveCriticalSection(&g_free_lock);
+
+    }
 
     if (free_page == NULL) {
         
