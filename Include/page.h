@@ -42,7 +42,7 @@ typedef struct page {
 
     PTE* pte;
 
-    ULONG64 list_type:2;
+    ULONG64 list_type:3;
 
     ULONG64 write_in_progress:1;
 

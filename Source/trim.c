@@ -31,10 +31,6 @@ void trim_thread(void* context) {
 
         if (event == 0) {
 
-            /**
-             * TS:
-             * try batching
-             */
             for (int i = 0; i < NUM_PTE_REGIONS; i ++) {
 
                 CRITICAL_SECTION* pte_lock = &g_pagetable->pte_lock_sections[i].lock;
@@ -227,7 +223,7 @@ void disk_write_thread(void* context) {
 
             }
             else {
-
+                
                 #if 0
                 /**
                  * Replenish the free list to take contention off of
@@ -271,7 +267,6 @@ void disk_write_thread(void* context) {
 
                 }
                 #else
-
                 curr_page->disk_address = j;
 
                 EnterCriticalSection(&g_standby_lock);
