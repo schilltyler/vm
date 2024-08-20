@@ -224,15 +224,10 @@ void disk_write_thread(void* context) {
             }
             else {
 
-                
-                #if 0
-
-
-
                 /**
                  * Replenish the free list to take contention off of
                  * standby
-                 * If the free list is below 10% of its full capacity
+                 * Replenish if free list has less than 100 pages
                  * Do not need free list lock here unless there is only
                  * 1 page on the free list because we are inserting at
                  * the tail and it is popping from the head
@@ -244,12 +239,12 @@ void disk_write_thread(void* context) {
                  * we will only have a small supply of these in order to
                  * take some pressure of the standby list
                  */
-                if (g_free_list.list_size < g_physical_page_count * 0.1) {
+                if (g_free_list.list_size < 100) {
 
                     curr_page->disk_address = j;
 
                     EnterCriticalSection(&g_free_lock);
-                    list_insert_tail(g_free_list, curr_page);
+                    list_insert_tail(&g_free_list, curr_page);
                     curr_page->list_type = FREE;
                     LeaveCriticalSection(&g_free_lock);
 
@@ -270,22 +265,6 @@ void disk_write_thread(void* context) {
                     SetEvent(g_fault_event);
 
                 }
-
-                #else
-                curr_page->disk_address = j;
-
-                EnterCriticalSection(&g_standby_lock);
-
-                list_insert(&g_standby_list, curr_page);
-                curr_page->list_type = STANDBY;
-
-                LeaveCriticalSection(&g_standby_lock);
-
-                SetEvent(g_fault_event);
-                #endif
-
-
-
             }
 
         }

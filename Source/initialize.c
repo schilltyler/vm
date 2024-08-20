@@ -166,10 +166,17 @@ VOID initialize_events(VOID)
     g_fault_event = CreateEvent(NULL, FALSE, FALSE, NULL);
     g_disk_write_event = CreateEvent(NULL, FALSE, FALSE, NULL);
 
-    InitializeCriticalSectionAndSpinCount(&g_mod_lock, 16000000);
-    InitializeCriticalSectionAndSpinCount(&g_standby_lock, 16000000);
-    InitializeCriticalSectionAndSpinCount(&g_free_lock, 16000000);
-    InitializeCriticalSectionAndSpinCount(&g_zero_lock, 16000000);
+    /**
+     * At 16000000 the critical section api will only look at bottom
+     * 20 or so bits (forget actual value) because it uses some of its
+     * bits to keep debug info. This would cause it to set the spin count
+     * to something we don't want. The value in there now is the correct
+     * size so we are spinning a lot which is what we want.
+     */
+    InitializeCriticalSectionAndSpinCount(&g_mod_lock, 15999999);
+    InitializeCriticalSectionAndSpinCount(&g_standby_lock, 15999999);
+    InitializeCriticalSectionAndSpinCount(&g_free_lock, 15999999);
+    InitializeCriticalSectionAndSpinCount(&g_zero_lock, 15999999);
 
     g_kill_trim_event = CreateEvent(NULL, FALSE, FALSE, NULL);
     g_trim_finished_event = CreateEvent(NULL, FALSE, FALSE, NULL);
