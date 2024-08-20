@@ -2,7 +2,7 @@
 #define VM_DEBUG_H
 
 #define DEBUG_PTE_LOCK 0
-#define DEBUG_PAGE 1
+#define DEBUG_PAGE 0
 #define THREAD_STATS 0
 #define SUPPORT_MULTIPLE_VA_TO_SAME_PAGE 1
 #define CIRCULAR_LOG 0
