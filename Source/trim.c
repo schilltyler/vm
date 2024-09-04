@@ -16,7 +16,6 @@ void trim_thread(void* context) {
     while (TRUE) {
 
         /**
-         * TS:
          * Waitformultipleobjects
          * parent thread can signal this thread to die
          * pass function an array of events
@@ -31,10 +30,14 @@ void trim_thread(void* context) {
 
         if (event == 0) {
 
+            int count = 0;
+
             for (int i = 0; i < NUM_PTE_REGIONS; i ++) {
 
                 CRITICAL_SECTION* pte_lock = &g_pagetable->pte_lock_sections[i].lock;
                 EnterCriticalSection(pte_lock);
+
+                count = 0;
 
                 for (int j = i * NUM_PTES_PER_REGION; j < (i + 1) * NUM_PTES_PER_REGION; j ++) {
 
@@ -53,14 +56,10 @@ void trim_thread(void* context) {
                         page_t* curr_page = page_from_pfn(trim_pte->memory.frame_number, g_pfn_base);
 
                         PULONG_PTR trim_va = va_from_pte(trim_pte);
-                        
-                        if (MapUserPhysicalPages(trim_va, 1, NULL) == FALSE) {
 
-                            printf ("full_virtual_memory_test : could not unmap trim_va %p\n", trim_va);
+                        g_trim_vas[count] = trim_va;
 
-                            DebugBreak();
-
-                        }
+                        count ++;
 
                         new_contents.transition.frame_number = trim_pte->memory.frame_number;
                         new_contents.transition.rescuable = 1;
@@ -86,6 +85,14 @@ void trim_thread(void* context) {
                         LeaveCriticalSection(&g_mod_lock);
 
                     }
+
+                }
+
+                if (MapUserPhysicalPagesScatter(g_trim_vas, count, NULL) == FALSE) {
+
+                    printf ("full_virtual_memory_test : could not batch unmap trim_vas\n");
+
+                    DebugBreak();
 
                 }
 

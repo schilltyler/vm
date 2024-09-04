@@ -81,6 +81,9 @@ extern LPVOID g_mod_page_va;
 extern int g_num_fault_threads;
 extern int g_va_iterate_type;
 
+// Global trim variables
+extern PVOID* g_trim_vas;
+
 // Global Events/Threads
 extern HANDLE g_trim_event;
 extern HANDLE g_disk_write_event;

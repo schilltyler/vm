@@ -10,3 +10,4 @@
 - Have the simulation access virtual addresses sequentially. This would allow me to implement the technique of batching maps and unmaps because I would know what the next virtual addresses would be. For instance, I can map one virtual addresses, but I know that the user is going to use the next two virtual addresses we fault on too, so why not map them as well ahead of time and save the cost of mapping each one individually when we fault on them.
 - Do a similar operation with a disk read that we do with a disk write where we release the modified lock while we write.
 - Could factor in deleting ptes
+- Eliminate O(n) search for free disk spot in mod writer

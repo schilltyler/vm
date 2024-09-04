@@ -43,7 +43,7 @@ VOID full_virtual_memory_test (VOID)
 
     WaitForSingleObject(g_trim_finished_event, INFINITE);
 
-    VirtualFree (g_vmem_base, 0, MEM_RELEASE);
+    VirtualFree(g_vmem_base, 0, MEM_RELEASE);
 
 }
 

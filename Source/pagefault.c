@@ -4,6 +4,12 @@
 #include "../Include/initialize.h"
 
 
+/**
+ * TS:
+ * Faulting on the same pte over and over because it is
+ * marked as valid when it has not been mapped
+ */
+
 int handle_page_fault(PULONG_PTR virtual_address, LPVOID mod_page_va2) {
 
     PTE_LOCK* pte_lock;

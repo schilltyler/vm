@@ -47,6 +47,9 @@ LPVOID g_mod_page_va;
 int g_num_fault_threads;
 int g_va_iterate_type;
 
+// Global trim variables
+PVOID* g_trim_vas;
+
 // Global Events/Threads
 HANDLE g_trim_event;
 HANDLE g_disk_write_event;
@@ -189,6 +192,18 @@ VOID initialize_events(VOID)
 VOID initialize_threads(VOID)
 {
     g_threads = (HANDLE*) malloc(sizeof(HANDLE) * (2 + g_num_fault_threads));
+
+    if (g_threads == NULL) {
+
+        printf("Could not malloc g_threads list\n");
+        return;
+
+    }
+
+    /**
+     * TS:
+     * Add checks to make sure these threads are actually created
+     */
     g_threads[0] = CreateThread(NULL, 0, (LPTHREAD_START_ROUTINE) trim_thread, NULL, 0, NULL);
     g_threads[1] = CreateThread(NULL, 0, (LPTHREAD_START_ROUTINE) disk_write_thread, NULL, 0, NULL);
 
@@ -197,6 +212,16 @@ VOID initialize_threads(VOID)
         g_threads[i + 2] = CreateThread(NULL, 0, (LPTHREAD_START_ROUTINE) fault_thread, NULL, 0, NULL);
 
     }
+
+    g_trim_vas = malloc(sizeof(PULONG_PTR) * g_num_ptes);
+
+    if (g_trim_vas == NULL) {
+
+        printf("Could not malloc g_trim_vas list\n");
+        return;
+
+    }
+
 }
 
 VOID initialize_pages(VOID)
